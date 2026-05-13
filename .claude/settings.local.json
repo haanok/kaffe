@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:api.anthropic.com)",
+      "Bash(cp /tmp/kaffe_design/kaffe/project/src/data.js /Users/hakon.nordal/Library/CloudStorage/OneDrive-Tieto/Documents/gitrepos/kaffe/src/data.js)",
+      "Bash(cp /tmp/kaffe_design/kaffe/project/src/ios-frame.jsx /Users/hakon.nordal/Library/CloudStorage/OneDrive-Tieto/Documents/gitrepos/kaffe/src/ios-frame.jsx)",
+      "Bash(cp /tmp/kaffe_design/kaffe/project/src/design-canvas.jsx /Users/hakon.nordal/Library/CloudStorage/OneDrive-Tieto/Documents/gitrepos/kaffe/src/design-canvas.jsx)",
+      "Bash(cp /tmp/kaffe_design/kaffe/project/src/tweaks-panel.jsx /Users/hakon.nordal/Library/CloudStorage/OneDrive-Tieto/Documents/gitrepos/kaffe/src/tweaks-panel.jsx)",
+      "Bash(cp /tmp/kaffe_design/kaffe/project/src/curve.jsx /Users/hakon.nordal/Library/CloudStorage/OneDrive-Tieto/Documents/gitrepos/kaffe/src/curve.jsx)",
+      "Bash(open *)"
+    ]
+  }
+}

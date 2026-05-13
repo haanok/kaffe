@@ -1,477 +1,430 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Caffeine Tracker</title>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Kaffe</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700&family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@300;400;500;600&display=swap" rel="stylesheet" />
   <style>
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
+    *, *::before, *::after { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; min-height: 100%; }
     body {
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      background: #111;
-      color: #eee;
-      min-height: 100vh;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      padding: 2rem 1rem;
+      background: radial-gradient(120% 80% at 20% -10%, #2c1f12 0%, #1a120b 55%, #110b06 100%);
+      background-attachment: fixed;
+      color: #f4e6d0;
+      font-family: 'Geist', system-ui, -apple-system, sans-serif;
+      -webkit-font-smoothing: antialiased;
     }
-
-    h1 {
-      font-size: 1.6rem;
-      font-weight: 600;
-      letter-spacing: 0.02em;
-      margin-bottom: 2rem;
-      color: #fff;
+    @keyframes kaffePulse {
+      0%   { box-shadow: 0 0 0 0 currentColor; }
+      70%  { box-shadow: 0 0 0 10px transparent; }
+      100% { box-shadow: 0 0 0 0 transparent; }
     }
-
-    .buttons {
-      display: flex;
-      gap: 1rem;
-      flex-wrap: wrap;
-      justify-content: center;
-      margin-bottom: 2rem;
-    }
-
-    button {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 0.4rem;
-      padding: 1.2rem 2rem;
-      border: none;
-      border-radius: 14px;
-      cursor: pointer;
-      font-size: 1rem;
-      font-weight: 600;
-      transition: transform 0.1s, filter 0.1s;
-      min-width: 160px;
-    }
-
-    button:active {
-      transform: scale(0.96);
-    }
-
-    button .icon { font-size: 2rem; }
-    button .label { font-size: 1rem; }
-    button .meta { font-size: 0.75rem; font-weight: 400; opacity: 0.75; }
-
-    #btn-coffee {
-      background: #5c3d1e;
-      color: #f5deb3;
-    }
-    #btn-coffee:hover { filter: brightness(1.2); }
-
-    #btn-monster {
-      background: #1a3a1a;
-      color: #a0e060;
-      border: 2px solid #4caf50;
-    }
-    #btn-monster:hover { filter: brightness(1.2); }
-
-    .totals {
-      display: flex;
-      gap: 1.5rem;
-      flex-wrap: wrap;
-      justify-content: center;
-      margin-bottom: 2rem;
-    }
-
-    .total-card {
-      background: #1e1e1e;
-      border-radius: 12px;
-      padding: 1rem 1.8rem;
-      text-align: center;
-      min-width: 130px;
-    }
-
-    .total-card .value {
-      font-size: 2rem;
-      font-weight: 700;
-      color: #fff;
-    }
-
-    .total-card .unit {
-      font-size: 0.8rem;
-      color: #888;
-      margin-top: 0.2rem;
-    }
-
-    .log-section {
-      width: 100%;
-      max-width: 480px;
-    }
-
-    .log-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 0.75rem;
-    }
-
-    .log-header h2 {
-      font-size: 1rem;
-      font-weight: 600;
-      color: #aaa;
-      text-transform: uppercase;
-      letter-spacing: 0.08em;
-    }
-
-    #btn-reset {
-      background: none;
-      border: 1px solid #444;
-      color: #888;
-      padding: 0.3rem 0.8rem;
-      border-radius: 6px;
-      font-size: 0.75rem;
-      cursor: pointer;
-      min-width: unset;
-      flex-direction: row;
-      gap: 0;
-    }
-    #btn-reset:hover { border-color: #888; color: #ccc; filter: none; }
-
-    #log {
-      list-style: none;
-      display: flex;
-      flex-direction: column;
-      gap: 0.5rem;
-    }
-
-    #log li {
-      background: #1e1e1e;
-      border-radius: 10px;
-      padding: 0.7rem 1rem;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      font-size: 0.9rem;
-      animation: fadeIn 0.2s ease;
-    }
-
-    #log li .entry-left {
-      display: flex;
-      align-items: center;
-      gap: 0.6rem;
-    }
-
-    #log li .entry-icon { font-size: 1.3rem; }
-
-    #log li .entry-name { font-weight: 500; }
-
-    #log li .entry-time {
-      font-size: 0.75rem;
-      color: #666;
-    }
-
-    #log li .entry-stats {
-      text-align: right;
-      font-size: 0.8rem;
-      color: #888;
-      line-height: 1.5;
-    }
-
-    #log li .entry-stats span {
-      display: block;
-    }
-
-    .empty-log {
-      color: #444;
-      font-size: 0.9rem;
-      text-align: center;
-      padding: 1.5rem 0;
-    }
-
-    @keyframes fadeIn {
-      from { opacity: 0; transform: translateY(-6px); }
-      to   { opacity: 1; transform: translateY(0); }
-    }
-
-    .info-box {
-      width: 100%;
-      max-width: 480px;
-      border-radius: 14px;
-      padding: 1rem 1.2rem;
-      margin-bottom: 2rem;
-      display: flex;
-      gap: 0.8rem;
-      align-items: flex-start;
-      animation: fadeIn 0.3s ease;
-      transition: background 0.4s, border-color 0.4s;
-      border: 1.5px solid transparent;
-    }
-
-    .info-box .info-icon {
-      font-size: 1.4rem;
-      flex-shrink: 0;
-      margin-top: 0.05rem;
-    }
-
-    .info-box .info-text {
-      font-size: 0.88rem;
-      line-height: 1.6;
-      color: #ddd;
-    }
-
-    .info-box .info-text strong {
-      display: block;
-      font-size: 0.78rem;
-      text-transform: uppercase;
-      letter-spacing: 0.07em;
-      margin-bottom: 0.3rem;
-      opacity: 0.7;
-    }
-
-    .info-box.level-idle   { background: #1a1a2e; border-color: #2a2a4a; }
-    .info-box.level-green  { background: #0d2b1a; border-color: #1e5c35; }
-    .info-box.level-yellow { background: #2b2200; border-color: #5c4500; }
-    .info-box.level-orange { background: #2b1200; border-color: #7a3000; }
-    .info-box.level-red    { background: #2b0000; border-color: #8b0000; }
+    input[type="range"] { -webkit-appearance: none; height: 26px; background: transparent; width: 100%; }
+    input[type="range"]::-webkit-slider-runnable-track { height: 4px; border-radius: 2px; background: rgba(255,200,140,0.15); }
+    input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 18px; height: 18px; border-radius: 50%; background: #d99757; margin-top: -7px; border: 2px solid #1a120b; box-shadow: 0 2px 8px rgba(0,0,0,0.4); cursor: pointer; }
+    ::-webkit-scrollbar { display: none; }
+    * { scrollbar-width: none; }
   </style>
+  <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 </head>
 <body>
+  <div id="root"></div>
+  <script type="text/babel" data-presets="env,react">
+const { useState, useEffect, useRef, useMemo } = React;
 
-<h1>Caffeine Tracker</h1>
+// ── Theme ──────────────────────────────────────────────────────────────────
+const T = {
+  fg: '#f4e6d0', muted: '#a89472', accent: '#d99757',
+  warn: '#e0a347', danger: '#e07a55', ok: '#a3c47a',
+  card: 'rgba(255,230,190,0.045)',
+  cardBorder: '1px solid rgba(255,200,140,0.08)',
+  divider: '1px solid rgba(255,200,140,0.06)',
+  track: 'rgba(255,200,140,0.07)',
+  glyphBg: 'rgba(217,151,87,0.12)',
+  coachBg: 'rgba(217,151,87,0.08)',
+  coachBorder: '1px solid rgba(217,151,87,0.22)',
+  sheetBg: '#1f1610',
+  bg: '#1a120b',
+  radius: 18,
+  fontDisplay: "'Instrument Serif', Georgia, serif",
+  fontMono: "'JetBrains Mono', monospace",
+  fontBody: "'Geist', system-ui, sans-serif",
+  displayWeight: 400,
+  displaySize: 30,
+  displayTracking: '-0.01em',
+};
 
-<div class="buttons">
-  <button id="btn-coffee" onclick="log('coffee')">
-    <span class="icon">☕</span>
-    <span class="label">Cup of Coffee</span>
-    <span class="meta">95 mg · 5 kcal</span>
-  </button>
-  <button id="btn-monster" onclick="log('monster')">
-    <span class="icon">🥤</span>
-    <span class="label">Monster Zero Ultra</span>
-    <span class="meta">150 mg · 10 kcal</span>
-  </button>
-</div>
+// ── Data ───────────────────────────────────────────────────────────────────
+const CATEGORIES = [
+  { id: 'coffee', label: 'Coffee' }, { id: 'tea', label: 'Tea' },
+  { id: 'energy', label: 'Energy' }, { id: 'soda', label: 'Soda' },
+  { id: 'supp', label: 'Supps' }, { id: 'sweets', label: 'Sweets' },
+];
+const DRINKS = [
+  { id: 'espresso',      name: 'Espresso shot',       cat: 'coffee', mg: 64,  kcal: 3,   serving: '30 ml' },
+  { id: 'dbl-espresso',  name: 'Double espresso',     cat: 'coffee', mg: 128, kcal: 6,   serving: '60 ml' },
+  { id: 'drip',          name: 'Drip coffee',         cat: 'coffee', mg: 95,  kcal: 5,   serving: '240 ml' },
+  { id: 'cold-brew',     name: 'Cold brew',           cat: 'coffee', mg: 200, kcal: 5,   serving: '350 ml' },
+  { id: 'americano',     name: 'Americano',           cat: 'coffee', mg: 95,  kcal: 10,  serving: '240 ml' },
+  { id: 'latte',         name: 'Latte',               cat: 'coffee', mg: 75,  kcal: 120, serving: '350 ml' },
+  { id: 'cappuccino',    name: 'Cappuccino',          cat: 'coffee', mg: 75,  kcal: 80,  serving: '180 ml' },
+  { id: 'flat-white',    name: 'Flat white',          cat: 'coffee', mg: 130, kcal: 110, serving: '180 ml' },
+  { id: 'mocha',         name: 'Mocha',               cat: 'coffee', mg: 95,  kcal: 290, serving: '350 ml' },
+  { id: 'decaf',         name: 'Decaf coffee',        cat: 'coffee', mg: 5,   kcal: 5,   serving: '240 ml' },
+  { id: 'matcha',        name: 'Matcha latte',        cat: 'tea',    mg: 70,  kcal: 130, serving: '350 ml' },
+  { id: 'green-tea',     name: 'Green tea',           cat: 'tea',    mg: 35,  kcal: 0,   serving: '240 ml' },
+  { id: 'black-tea',     name: 'Black tea',           cat: 'tea',    mg: 47,  kcal: 2,   serving: '240 ml' },
+  { id: 'earl-grey',     name: 'Earl Grey',           cat: 'tea',    mg: 40,  kcal: 2,   serving: '240 ml' },
+  { id: 'yerba-mate',    name: 'Yerba mate',          cat: 'tea',    mg: 85,  kcal: 5,   serving: '240 ml' },
+  { id: 'red-bull',      name: 'Red Bull',            cat: 'energy', mg: 80,  kcal: 110, serving: '250 ml' },
+  { id: 'rb-sugarfree',  name: 'Red Bull Sugar-free', cat: 'energy', mg: 80,  kcal: 5,   serving: '250 ml' },
+  { id: 'monster',       name: 'Monster Original',    cat: 'energy', mg: 160, kcal: 230, serving: '500 ml' },
+  { id: 'monster-zero',  name: 'Monster Zero Ultra',  cat: 'energy', mg: 150, kcal: 10,  serving: '500 ml' },
+  { id: 'celsius',       name: 'Celsius',             cat: 'energy', mg: 200, kcal: 10,  serving: '350 ml' },
+  { id: 'bang',          name: 'Bang Energy',         cat: 'energy', mg: 300, kcal: 0,   serving: '470 ml' },
+  { id: 'coke',          name: 'Coca-Cola',           cat: 'soda',   mg: 34,  kcal: 140, serving: '330 ml' },
+  { id: 'diet-coke',     name: 'Diet Coke',           cat: 'soda',   mg: 46,  kcal: 0,   serving: '330 ml' },
+  { id: 'pepsi',         name: 'Pepsi',               cat: 'soda',   mg: 38,  kcal: 150, serving: '330 ml' },
+  { id: 'mtn-dew',       name: 'Mountain Dew',        cat: 'soda',   mg: 54,  kcal: 170, serving: '330 ml' },
+  { id: 'preworkout',    name: 'Pre-workout scoop',   cat: 'supp',   mg: 200, kcal: 5,   serving: '1 scoop' },
+  { id: 'caf-pill',      name: 'Caffeine pill 200',   cat: 'supp',   mg: 200, kcal: 0,   serving: '1 tablet' },
+  { id: 'caf-pill-100',  name: 'Caffeine pill 100',   cat: 'supp',   mg: 100, kcal: 0,   serving: '1 tablet' },
+  { id: 'dark-choc',     name: 'Dark chocolate',      cat: 'sweets', mg: 24,  kcal: 170, serving: '30 g' },
+  { id: 'mocha-icecream',name: 'Coffee ice cream',    cat: 'sweets', mg: 30,  kcal: 220, serving: '100 g' },
+];
+const DRINK_BY_ID = Object.fromEntries(DRINKS.map(d => [d.id, d]));
+const HALF_LIFE_MS = 5 * 60 * 60 * 1000;
 
-<div class="totals">
-  <div class="total-card">
-    <div class="value" id="total-caffeine">0</div>
-    <div class="unit">mg caffeine</div>
-  </div>
-  <div class="total-card">
-    <div class="value" id="total-calories">0</div>
-    <div class="unit">kcal</div>
-  </div>
-  <div class="total-card">
-    <div class="value" id="total-drinks">0</div>
-    <div class="unit">drinks today</div>
-  </div>
-</div>
-
-<div class="info-box level-idle" id="info-box">
-  <span class="info-icon" id="info-icon">💡</span>
-  <div class="info-text">
-    <strong id="info-label">Did you know?</strong>
-    <span id="info-msg">Log your first drink to get personalised caffeine facts and health tips.</span>
-  </div>
-</div>
-
-<div class="log-section">
-  <div class="log-header">
-    <h2>Today's log</h2>
-    <button id="btn-reset" onclick="resetLog()">Clear</button>
-  </div>
-  <ul id="log">
-    <li class="empty-log" id="empty-msg">No drinks logged yet.</li>
-  </ul>
-</div>
-
-<script>
-  const DRINKS = {
-    coffee: { name: 'Coffee', icon: '☕', caffeine: 95, calories: 5 },
-    monster: { name: 'Monster Zero Ultra', icon: '🥤', caffeine: 150, calories: 10 },
-  };
-
-  const STORAGE_KEY = 'caffeine-log';
-
-  function todayKey() {
-    return new Date().toISOString().slice(0, 10);
+function activeAt(entries, tMs) {
+  let sum = 0;
+  for (const e of entries) {
+    if (e.time > tMs) continue;
+    sum += e.mg * Math.pow(0.5, (tMs - e.time) / HALF_LIFE_MS);
   }
+  return sum;
+}
+function fmtTime(ms) {
+  const d = new Date(ms);
+  let h = d.getHours(); const m = d.getMinutes();
+  const ap = h >= 12 ? 'pm' : 'am';
+  h = h % 12; if (h === 0) h = 12;
+  return `${h}:${m.toString().padStart(2, '0')} ${ap}`;
+}
 
-  function loadEntries() {
-    try {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      if (!raw) return [];
-      const { date, entries } = JSON.parse(raw);
-      return date === todayKey() ? entries : [];
-    } catch { return []; }
+// ── Storage ────────────────────────────────────────────────────────────────
+const STORE_KEY = 'kaffe-log-v1';
+function todayKey() { return new Date().toISOString().slice(0, 10); }
+function loadEntries() {
+  try {
+    const raw = localStorage.getItem(STORE_KEY);
+    if (!raw) return [];
+    const { date, entries } = JSON.parse(raw);
+    return date === todayKey() ? entries : [];
+  } catch { return []; }
+}
+function saveEntries(entries) {
+  localStorage.setItem(STORE_KEY, JSON.stringify({ date: todayKey(), entries }));
+}
+
+// ── Live clock ─────────────────────────────────────────────────────────────
+function useLiveNow() {
+  const [now, setNow] = useState(Date.now);
+  useEffect(() => {
+    const iv = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(iv);
+  }, []);
+  return now;
+}
+
+// ── Drink glyph icons ──────────────────────────────────────────────────────
+function DrinkGlyph({ cat, size = 20 }) {
+  const s = size, c = 'currentColor';
+  switch (cat) {
+    case 'coffee': return <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M4 9h13v6a4 4 0 0 1-4 4H8a4 4 0 0 1-4-4V9z"/><path d="M17 11h2a2 2 0 0 1 0 4h-2"/><path d="M7 4c0 1.5 1 1.5 1 3M11 4c0 1.5 1 1.5 1 3"/></svg>;
+    case 'tea':    return <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M5 10h12v5a4 4 0 0 1-4 4H9a4 4 0 0 1-4-4v-5z"/><path d="M17 12h2a2 2 0 0 1 0 4h-2"/><path d="M9 6c1 1.5-1 2.5 0 4M13 6c1 1.5-1 2.5 0 4"/></svg>;
+    case 'energy': return <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M7 4h10v3l-1 13H8L7 7V4z"/><path d="M13 9l-2 4h3l-2 4" fill={c} stroke="none"/></svg>;
+    case 'soda':   return <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M7 7h10l-1 13H8L7 7z"/><path d="M7 7l1-3h8l1 3"/><path d="M8 11h8"/></svg>;
+    case 'supp':   return <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><rect x="4" y="9" width="16" height="6" rx="3"/><line x1="12" y1="9" x2="12" y2="15"/></svg>;
+    case 'sweets': return <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><rect x="5" y="5" width="14" height="14" rx="2"/><path d="M5 9h14M5 13h14M9 5v14M13 5v14"/></svg>;
+    default: return null;
   }
+}
 
-  function saveEntries(entries) {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ date: todayKey(), entries }));
+// ── Decay curve SVG ────────────────────────────────────────────────────────
+function DecayCurve({ entries, now, width, height = 150 }) {
+  const earliest = entries.length ? Math.min(...entries.map(e => e.time)) - 30 * 60 * 1000 : now - 60 * 60 * 1000;
+  const start = Math.min(earliest, now - 2 * 60 * 60 * 1000);
+  const end = now + 12 * 60 * 60 * 1000;
+  const pts = [];
+  let peak = 0;
+  for (let t = start; t <= end; t += 5 * 60 * 1000) {
+    let v = 0;
+    for (const e of entries) { if (e.time <= t) v += e.mg * Math.pow(0.5, (t - e.time) / HALF_LIFE_MS); }
+    if (v > peak) peak = v;
+    pts.push({ t, v });
   }
-
-  let entries = loadEntries();
-
-  function log(type) {
-    const drink = DRINKS[type];
-    const entry = { type, time: new Date().toISOString() };
-    entries.unshift(entry);
-    saveEntries(entries);
-    render();
+  const yMax = Math.max(250, peak * 1.15, 440);
+  const pl = 8, pr = 8, pt = 14, pb = 24;
+  const iw = width - pl - pr, ih = height - pt - pb;
+  const xOf = t => pl + ((t - start) / (end - start)) * iw;
+  const yOf = v => pt + (1 - Math.min(v, yMax) / yMax) * ih;
+  let line = '', area = '';
+  pts.forEach((p, i) => {
+    const x = xOf(p.t).toFixed(1), y = yOf(p.v).toFixed(1);
+    if (i === 0) { line += `M ${x} ${y}`; area += `M ${x} ${(pt + ih).toFixed(1)} L ${x} ${y}`; }
+    else { line += ` L ${x} ${y}`; area += ` L ${x} ${y}`; }
+  });
+  area += ` L ${xOf(end).toFixed(1)} ${(pt + ih).toFixed(1)} Z`;
+  const limitY = yOf(400), sleepY = yOf(50), nowX = xOf(now);
+  const hourTicks = [];
+  for (let h = Math.ceil(start / 3600000); h <= Math.floor(end / 3600000); h += 2) {
+    const t = h * 3600000, d = new Date(t);
+    let hr = d.getHours(); const ap = hr >= 12 ? 'p' : 'a';
+    hr = hr % 12; if (hr === 0) hr = 12;
+    hourTicks.push({ x: xOf(t), label: `${hr}${ap}` });
   }
+  const gradId = 'cg';
+  return (
+    <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} style={{ display: 'block', overflow: 'visible' }}>
+      <defs>
+        <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor={T.accent} stopOpacity="0.32" />
+          <stop offset="100%" stopColor={T.accent} stopOpacity="0" />
+        </linearGradient>
+      </defs>
+      <line x1={pl} x2={width - pr} y1={limitY} y2={limitY} stroke={T.danger} strokeOpacity="0.45" strokeWidth="1" strokeDasharray="2 4" />
+      <text x={width - pr} y={limitY - 4} textAnchor="end" fill={T.danger} fillOpacity="0.7" fontSize="9" fontFamily={T.fontMono} letterSpacing="0.05em">400 MG · DAILY MAX</text>
+      <line x1={pl} x2={width - pr} y1={sleepY} y2={sleepY} stroke={T.muted} strokeOpacity="0.5" strokeWidth="1" strokeDasharray="2 4" />
+      <text x={pl} y={sleepY - 4} textAnchor="start" fill={T.muted} fontSize="9" fontFamily={T.fontMono} letterSpacing="0.05em">50 MG · SLEEP-OK</text>
+      <path d={area} fill={`url(#${gradId})`} />
+      <path d={line} fill="none" stroke={T.accent} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+      {entries.map((e, i) => {
+        const ex = xOf(e.time), ey = yOf(e.mg);
+        return <g key={i}><circle cx={ex} cy={ey} r="3" fill={T.accent} /><circle cx={ex} cy={ey} r="6" fill="none" stroke={T.accent} strokeOpacity="0.25" /></g>;
+      })}
+      <line x1={nowX} x2={nowX} y1={pt - 4} y2={pt + ih} stroke={T.fg} strokeOpacity="0.5" strokeWidth="1" strokeDasharray="3 3" />
+      <circle cx={nowX} cy={yOf(activeAt(entries, now))} r="4" fill={T.card} stroke={T.accent} strokeWidth="2" />
+      {hourTicks.map((t, i) => (
+        <g key={i}>
+          <line x1={t.x} x2={t.x} y1={pt + ih} y2={pt + ih + 3} stroke={T.muted} strokeOpacity="0.5" />
+          <text x={t.x} y={pt + ih + 14} textAnchor="middle" fill={T.muted} fontSize="9" fontFamily={T.fontMono} letterSpacing="0.04em">{t.label}</text>
+        </g>
+      ))}
+    </svg>
+  );
+}
 
-  function resetLog() {
-    if (!entries.length) return;
-    if (!confirm('Clear today\'s log?')) return;
-    entries = [];
-    saveEntries(entries);
-    render();
-  }
-
-  function formatTime(iso) {
-    return new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  }
-
-  function render() {
-    const totalCaffeine = entries.reduce((s, e) => s + DRINKS[e.type].caffeine, 0);
-    const totalCalories = entries.reduce((s, e) => s + DRINKS[e.type].calories, 0);
-
-    document.getElementById('total-caffeine').textContent = totalCaffeine;
-    document.getElementById('total-calories').textContent = totalCalories;
-    document.getElementById('total-drinks').textContent = entries.length;
-    updateInfoBox(totalCaffeine);
-
-    const ul = document.getElementById('log');
-    ul.innerHTML = '';
-
-    if (!entries.length) {
-      ul.innerHTML = '<li class="empty-log" id="empty-msg">No drinks logged yet.</li>';
-      return;
-    }
-
-    entries.forEach(entry => {
-      const drink = DRINKS[entry.type];
-      const li = document.createElement('li');
-      li.innerHTML = `
-        <div class="entry-left">
-          <span class="entry-icon">${drink.icon}</span>
-          <div>
-            <div class="entry-name">${drink.name}</div>
-            <div class="entry-time">${formatTime(entry.time)}</div>
+// ── Browse sheet ───────────────────────────────────────────────────────────
+function BrowseSheet({ open, onClose, onPick }) {
+  const [cat, setCat] = useState('all');
+  const [query, setQuery] = useState('');
+  const filtered = DRINKS.filter(d =>
+    (cat === 'all' || d.cat === cat) &&
+    (query === '' || d.name.toLowerCase().includes(query.toLowerCase()))
+  );
+  return (
+    <div style={{ position: 'fixed', inset: 0, pointerEvents: open ? 'auto' : 'none', zIndex: 50 }}>
+      <div onClick={onClose} style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.5)', opacity: open ? 1 : 0, transition: 'opacity 0.25s' }} />
+      <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, maxHeight: '80vh', background: T.sheetBg, borderTopLeftRadius: 26, borderTopRightRadius: 26, transform: open ? 'translateY(0)' : 'translateY(100%)', transition: 'transform 0.3s cubic-bezier(0.32,0.72,0,1)', display: 'flex', flexDirection: 'column', boxShadow: '0 -20px 50px rgba(0,0,0,0.5)', overflow: 'hidden' }}>
+        <div style={{ display: 'flex', justifyContent: 'center', paddingTop: 8, flexShrink: 0 }}>
+          <div style={{ width: 36, height: 4, borderRadius: 2, background: T.muted, opacity: 0.4 }} />
+        </div>
+        <div style={{ padding: '12px 18px 10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
+          <div style={{ fontFamily: T.fontDisplay, fontSize: 22, color: T.fg, fontWeight: T.displayWeight }}>Add a drink</div>
+          <button onClick={onClose} style={{ background: T.track, border: 'none', color: T.fg, width: 30, height: 30, borderRadius: 15, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg>
+          </button>
+        </div>
+        <div style={{ padding: '0 18px 10px', flexShrink: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: T.track, borderRadius: 10, padding: '8px 12px' }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={T.muted} strokeWidth="2" strokeLinecap="round"><circle cx="11" cy="11" r="7" /><path d="M21 21l-4.3-4.3" /></svg>
+            <input value={query} onChange={e => setQuery(e.target.value)} placeholder="Search drinks" style={{ flex: 1, background: 'none', border: 'none', outline: 'none', color: T.fg, fontFamily: T.fontBody, fontSize: 13 }} />
           </div>
         </div>
-        <div class="entry-stats">
-          <span>${drink.caffeine} mg caffeine</span>
-          <span>${drink.calories} kcal</span>
+        <div style={{ display: 'flex', gap: 6, padding: '0 18px 10px', overflowX: 'auto', flexShrink: 0 }}>
+          {[{ id: 'all', label: 'All' }, ...CATEGORIES].map(c => (
+            <button key={c.id} onClick={() => setCat(c.id)} style={{ padding: '6px 12px', border: 'none', cursor: 'pointer', flexShrink: 0, background: cat === c.id ? T.accent : T.track, color: cat === c.id ? T.bg : T.fg, fontFamily: T.fontMono, fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', borderRadius: 9, transition: 'all 0.15s' }}>{c.label}</button>
+          ))}
         </div>
-      `;
-      ul.appendChild(li);
-    });
-  }
+        <div style={{ flex: 1, overflowY: 'auto', padding: '0 18px 32px' }}>
+          {filtered.map((d, i) => (
+            <button key={d.id} onClick={() => { onPick(d.id); onClose(); }} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 12, padding: '10px 4px', border: 'none', borderBottom: i < filtered.length - 1 ? T.divider : 'none', background: 'transparent', cursor: 'pointer', color: T.fg, textAlign: 'left' }}>
+              <div style={{ width: 36, height: 36, borderRadius: 10, background: T.glyphBg, display: 'flex', alignItems: 'center', justifyContent: 'center', color: T.accent, flexShrink: 0 }}><DrinkGlyph cat={d.cat} /></div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontFamily: T.fontBody, fontSize: 14, fontWeight: 500, color: T.fg, marginBottom: 2 }}>{d.name}</div>
+                <div style={{ fontFamily: T.fontMono, fontSize: 10, color: T.muted, letterSpacing: '0.04em' }}>{d.serving} · {d.mg} mg · {d.kcal} kcal</div>
+              </div>
+              <div style={{ fontFamily: T.fontMono, fontSize: 13, color: T.accent }}>+</div>
+            </button>
+          ))}
+          {filtered.length === 0 && <div style={{ textAlign: 'center', padding: 40, color: T.muted, fontFamily: T.fontBody, fontSize: 13 }}>No drinks match.</div>}
+        </div>
+      </div>
+    </div>
+  );
+}
 
-  // ── Info box ─────────────────────────────────────────────────────────────
+// ── Card ───────────────────────────────────────────────────────────────────
+function Card({ children, style = {}, padding = 16 }) {
+  return <div style={{ background: T.card, border: T.cardBorder, borderRadius: T.radius, padding, ...style }}>{children}</div>;
+}
 
-  const INFO_TIERS = [
-    {
-      maxCaffeine: 0,
-      level: 'idle',
-      icon: '💡',
-      label: 'Did you know?',
-      facts: [
-        'Log your first drink to get personalised caffeine facts and health tips.',
-        'Caffeine is the world\'s most widely consumed psychoactive substance — and the only one freely sold in most countries.',
-        'Coffee was discovered, according to legend, when an Ethiopian goat herder noticed his goats dancing after eating coffee berries.',
-      ],
-    },
-    {
-      maxCaffeine: 100,
-      level: 'green',
-      icon: '✅',
-      label: 'Looking good',
-      facts: [
-        'A small dose of caffeine (40–75 mg) is enough to improve alertness and mood without jitteriness.',
-        'Caffeine works by blocking adenosine receptors in the brain — adenosine is the chemical that makes you feel sleepy.',
-        'Coffee is one of the richest dietary sources of antioxidants in the Western diet, outranking fruits and vegetables for many people.',
-        'Moderate caffeine intake is linked to a reduced risk of Parkinson\'s disease and type 2 diabetes in long-term studies.',
-      ],
-    },
-    {
-      maxCaffeine: 200,
-      level: 'green',
-      icon: '✅',
-      label: 'Still in the clear',
-      facts: [
-        'Caffeine has a half-life of about 5 hours — half of what you drank now will still be in your system at bedtime if you drink in the afternoon.',
-        'Monster Zero Ultra uses sucralose instead of sugar, which is why it has almost no calories despite tasting sweet.',
-        'Caffeine can enhance physical endurance by up to 12% and is used by many athletes as a legal performance aid.',
-        'The LD50 of caffeine (lethal dose for 50% of test subjects) is roughly 150–200 mg per kg of body weight — so a fatal dose for an adult would be around 10 g, or about 100 cups of coffee.',
-      ],
-    },
-    {
-      maxCaffeine: 300,
-      level: 'green',
-      icon: '✅',
-      label: 'Moderate intake',
-      facts: [
-        'You\'re within the safe range. The FDA and most health agencies consider up to 400 mg/day safe for healthy adults.',
-        'Caffeine sensitivity varies widely due to genetics. Variants in the CYP1A2 gene determine whether you\'re a fast or slow caffeine metaboliser.',
-        'Drinking caffeine after 2–3 pm can delay sleep onset by up to an hour, even if you don\'t feel wired.',
-        'Taurine in energy drinks like Monster has a calming effect — it\'s sometimes called nature\'s anti-anxiety amino acid.',
-      ],
-    },
-    {
-      maxCaffeine: 400,
-      level: 'yellow',
-      icon: '⚠️',
-      label: 'Approaching daily limit',
-      facts: [
-        'You\'re getting close to the 400 mg/day limit recommended by health authorities. Consider making your next one a decaf.',
-        'At high doses, caffeine can trigger anxiety, a racing heart, and restlessness — especially in people with anxiety disorders.',
-        'Caffeine can raise blood pressure temporarily by 3–14 mmHg. Worth watching if you have hypertension.',
-        'Exceeding 400 mg regularly can worsen acid reflux and upset the stomach by stimulating acid production.',
-      ],
-    },
-    {
-      maxCaffeine: 600,
-      level: 'orange',
-      icon: '🚨',
-      label: 'Over the recommended limit',
-      facts: [
-        'You\'ve exceeded the 400 mg/day guideline. Common symptoms at this level include jitteriness, headaches, and difficulty concentrating.',
-        'High caffeine intake can disrupt sleep architecture — even if you fall asleep, deep (slow-wave) sleep is reduced.',
-        'Caffeine dependence is real: regular high intake leads to tolerance, and skipping a day can cause withdrawal headaches within 12–24 hours.',
-        'Energy drinks at high intake have been associated with cardiac arrhythmias in some individuals, particularly when combined with exercise.',
-      ],
-    },
-    {
-      maxCaffeine: Infinity,
-      level: 'red',
-      icon: '🛑',
-      label: 'Seriously high intake — slow down',
-      facts: [
-        'Above 600 mg, side effects become likely for most people: rapid heartbeat, anxiety, muscle tremors, and insomnia.',
-        'Doses above 1000 mg/day have been linked to caffeine toxicity: nausea, vomiting, and in rare cases cardiac events.',
-        'At this level, consider stopping for the day. Water, a walk, and rest will help more than another drink.',
-        'If you feel chest pain, a very fast or irregular heartbeat, or severe anxiety after heavy caffeine use, seek medical attention.',
-      ],
-    },
-  ];
+// ── App ────────────────────────────────────────────────────────────────────
+function App() {
+  const [entries, setEntries] = useState(loadEntries);
+  const [browseOpen, setBrowseOpen] = useState(false);
+  const now = useLiveNow();
+  const [width, setWidth] = useState(Math.min(window.innerWidth, 480));
 
-  let lastFactIndex = -1;
+  useEffect(() => {
+    const onResize = () => setWidth(Math.min(window.innerWidth, 480));
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
 
-  function pickFact(facts) {
-    let idx;
-    do { idx = Math.floor(Math.random() * facts.length); } while (facts.length > 1 && idx === lastFactIndex);
-    lastFactIndex = idx;
-    return facts[idx];
-  }
+  const addEntry = drinkId => {
+    const d = DRINK_BY_ID[drinkId];
+    const next = [...entries, { id: 'e' + Date.now(), drink: drinkId, mg: d.mg, kcal: d.kcal, time: Date.now() }];
+    setEntries(next); saveEntries(next);
+  };
+  const removeEntry = id => {
+    const next = entries.filter(e => e.id !== id);
+    setEntries(next); saveEntries(next);
+  };
 
-  function updateInfoBox(caffeine) {
-    const tier = INFO_TIERS.find(t => caffeine <= t.maxCaffeine);
-    const box = document.getElementById('info-box');
-    box.className = `info-box level-${tier.level}`;
-    document.getElementById('info-icon').textContent = tier.icon;
-    document.getElementById('info-label').textContent = tier.label;
-    document.getElementById('info-msg').textContent = pickFact(tier.facts);
-  }
+  const total = entries.reduce((s, e) => s + e.mg, 0);
+  const kcal = entries.reduce((s, e) => s + e.kcal, 0);
+  const active = Math.round(activeAt(entries, now));
+  const pctLimit = Math.min(100, (total / 400) * 100);
 
-  render();
-</script>
+  let coach;
+  if (total === 0)       coach = "Fresh day. Hit the espresso button when you're ready.";
+  else if (total < 200)  coach = "You're cruising. Plenty of headroom for that afternoon coffee.";
+  else if (total < 350)  coach = "Solid intake. Good idea to swap the next one for tea.";
+  else if (total < 500)  coach = "You're at your daily limit. Body is fully fueled.";
+  else                   coach = "Big day on the beans. Maybe wind down with water from here.";
 
+  const h = new Date(now).getHours();
+  const greeting = h < 5 ? "Late one" : h < 12 ? "Good morning" : h < 17 ? "Good afternoon" : h < 21 ? "Good evening" : "Up late";
+
+  const QUICK = ['drip', 'dbl-espresso', 'latte', 'matcha', 'monster-zero'];
+
+  const curveWidth = width - 36; // card padding 18px each side
+
+  return (
+    <div style={{ maxWidth: 480, margin: '0 auto', padding: '24px 18px 60px', display: 'flex', flexDirection: 'column', gap: 18 }}>
+
+      {/* Greeting */}
+      <div style={{ paddingTop: 8 }}>
+        <div style={{ fontFamily: T.fontMono, fontSize: 10, letterSpacing: '0.18em', textTransform: 'uppercase', color: T.muted, marginBottom: 4 }}>{greeting.toUpperCase()}</div>
+        <div style={{ fontFamily: T.fontDisplay, fontSize: T.displaySize, lineHeight: 1.05, color: T.fg, fontWeight: T.displayWeight, letterSpacing: T.displayTracking }}>Today</div>
+        <div style={{ fontFamily: T.fontBody, fontSize: 13, color: T.muted, marginTop: 8, lineHeight: 1.5 }}>{coach}</div>
+      </div>
+
+      {/* Active in body */}
+      <Card padding={18}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 4 }}>
+          <div style={{ fontFamily: T.fontMono, fontSize: 10, letterSpacing: '0.14em', textTransform: 'uppercase', color: T.muted }}>In your body right now</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span style={{ width: 6, height: 6, borderRadius: '50%', background: T.accent, display: 'block', animation: 'kaffePulse 2s ease-out infinite' }} />
+            <span style={{ fontFamily: T.fontMono, fontSize: 9, letterSpacing: '0.18em', textTransform: 'uppercase', color: T.muted }}>LIVE</span>
+          </div>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginTop: 6, marginBottom: 8 }}>
+          <span style={{ fontFamily: T.fontDisplay, fontSize: 64, lineHeight: 1, color: T.fg, fontWeight: T.displayWeight, letterSpacing: T.displayTracking, fontFeatureSettings: '"tnum"' }}>{active}</span>
+          <span style={{ fontFamily: T.fontMono, fontSize: 13, color: T.muted }}>mg active</span>
+        </div>
+        <DecayCurve entries={entries} now={now} width={curveWidth} height={150} />
+      </Card>
+
+      {/* Stats row */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
+        {[['Today, total', total, 'mg'], ['Calories', kcal, 'kcal'], ['Drinks', entries.length, '']].map(([label, value, unit]) => (
+          <Card key={label} padding={12}>
+            <div style={{ fontFamily: T.fontMono, fontSize: 9, letterSpacing: '0.12em', textTransform: 'uppercase', color: T.muted, marginBottom: 4 }}>{label}</div>
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: 4 }}>
+              <span style={{ fontFamily: T.fontDisplay, fontSize: 26, lineHeight: 1, color: T.fg, fontWeight: T.displayWeight, fontFeatureSettings: '"tnum"' }}>{value}</span>
+              {unit && <span style={{ fontFamily: T.fontMono, fontSize: 11, color: T.muted }}>{unit}</span>}
+            </div>
+          </Card>
+        ))}
+      </div>
+
+      {/* Daily limit bar */}
+      <Card padding={14}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', fontFamily: T.fontMono, fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', color: T.muted, marginBottom: 8 }}>
+          <span>Daily limit</span><span>{total} / 400 mg</span>
+        </div>
+        <div style={{ height: 6, borderRadius: 3, background: T.track, overflow: 'hidden' }}>
+          <div style={{ height: '100%', width: `${pctLimit}%`, background: pctLimit < 75 ? T.accent : pctLimit < 100 ? T.warn : T.danger, borderRadius: 3, transition: 'width 0.5s ease' }} />
+        </div>
+      </Card>
+
+      {/* Quick log */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0 4px' }}>
+          <div style={{ fontFamily: T.fontMono, fontSize: 10, letterSpacing: '0.14em', textTransform: 'uppercase', color: T.muted, fontWeight: 500 }}>Quick log</div>
+          <button onClick={() => setBrowseOpen(true)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontFamily: T.fontMono, fontSize: 10, letterSpacing: '0.14em', textTransform: 'uppercase', color: T.accent, padding: '4px 0' }}>Browse all →</button>
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+          {QUICK.map(id => {
+            const d = DRINK_BY_ID[id];
+            return (
+              <button key={id} onClick={() => addEntry(id)}
+                style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', background: T.card, border: T.cardBorder, borderRadius: T.radius, cursor: 'pointer', color: T.fg, textAlign: 'left', transition: 'transform 0.1s' }}
+                onMouseDown={e => e.currentTarget.style.transform = 'scale(0.97)'}
+                onMouseUp={e => e.currentTarget.style.transform = 'scale(1)'}
+                onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}>
+                <div style={{ width: 36, height: 36, borderRadius: 10, background: T.glyphBg, display: 'flex', alignItems: 'center', justifyContent: 'center', color: T.accent, flexShrink: 0 }}><DrinkGlyph cat={d.cat} /></div>
+                <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+                  <span style={{ fontFamily: T.fontBody, fontSize: 13, color: T.fg, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{d.name}</span>
+                  <span style={{ fontFamily: T.fontMono, fontSize: 10, color: T.muted, letterSpacing: '0.04em' }}>{d.mg} mg · {d.kcal} kcal</span>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Today's log */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        <div style={{ padding: '0 4px', fontFamily: T.fontMono, fontSize: 10, letterSpacing: '0.14em', textTransform: 'uppercase', color: T.muted, fontWeight: 500 }}>Today's log</div>
+        {entries.length === 0 ? (
+          <Card padding={20} style={{ textAlign: 'center' }}>
+            <span style={{ fontFamily: T.fontBody, fontSize: 13, color: T.muted }}>Nothing logged yet today.</span>
+          </Card>
+        ) : (
+          <Card padding={0}>
+            {entries.slice().sort((a, b) => b.time - a.time).map((e, i, arr) => {
+              const d = DRINK_BY_ID[e.drink];
+              return (
+                <div key={e.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', borderBottom: i < arr.length - 1 ? T.divider : 'none' }}>
+                  <div style={{ width: 36, height: 36, borderRadius: 10, background: T.glyphBg, display: 'flex', alignItems: 'center', justifyContent: 'center', color: T.accent, flexShrink: 0 }}><DrinkGlyph cat={d.cat} /></div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontFamily: T.fontBody, fontSize: 13, fontWeight: 500, color: T.fg, marginBottom: 2 }}>{d.name}</div>
+                    <div style={{ fontFamily: T.fontMono, fontSize: 10, color: T.muted, letterSpacing: '0.04em' }}>{fmtTime(e.time)} · {e.mg} mg · {e.kcal} kcal</div>
+                  </div>
+                  <button onClick={() => removeEntry(e.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: T.muted, padding: 6 }}>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg>
+                  </button>
+                </div>
+              );
+            })}
+          </Card>
+        )}
+      </div>
+
+      <BrowseSheet open={browseOpen} onClose={() => setBrowseOpen(false)} onPick={addEntry} />
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
 </body>
 </html>
