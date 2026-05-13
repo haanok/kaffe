@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Caffeine Tracker</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #111;
+      color: #eee;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 2rem 1rem;
+    }
+
+    h1 {
+      font-size: 1.6rem;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+      margin-bottom: 2rem;
+      color: #fff;
+    }
+
+    .buttons {
+      display: flex;
+      gap: 1rem;
+      flex-wrap: wrap;
+      justify-content: center;
+      margin-bottom: 2rem;
+    }
+
+    button {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.4rem;
+      padding: 1.2rem 2rem;
+      border: none;
+      border-radius: 14px;
+      cursor: pointer;
+      font-size: 1rem;
+      font-weight: 600;
+      transition: transform 0.1s, filter 0.1s;
+      min-width: 160px;
+    }
+
+    button:active {
+      transform: scale(0.96);
+    }
+
+    button .icon { font-size: 2rem; }
+    button .label { font-size: 1rem; }
+    button .meta { font-size: 0.75rem; font-weight: 400; opacity: 0.75; }
+
+    #btn-coffee {
+      background: #5c3d1e;
+      color: #f5deb3;
+    }
+    #btn-coffee:hover { filter: brightness(1.2); }
+
+    #btn-monster {
+      background: #1a3a1a;
+      color: #a0e060;
+      border: 2px solid #4caf50;
+    }
+    #btn-monster:hover { filter: brightness(1.2); }
+
+    .totals {
+      display: flex;
+      gap: 1.5rem;
+      flex-wrap: wrap;
+      justify-content: center;
+      margin-bottom: 2rem;
+    }
+
+    .total-card {
+      background: #1e1e1e;
+      border-radius: 12px;
+      padding: 1rem 1.8rem;
+      text-align: center;
+      min-width: 130px;
+    }
+
+    .total-card .value {
+      font-size: 2rem;
+      font-weight: 700;
+      color: #fff;
+    }
+
+    .total-card .unit {
+      font-size: 0.8rem;
+      color: #888;
+      margin-top: 0.2rem;
+    }
+
+    .log-section {
+      width: 100%;
+      max-width: 480px;
+    }
+
+    .log-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 0.75rem;
+    }
+
+    .log-header h2 {
+      font-size: 1rem;
+      font-weight: 600;
+      color: #aaa;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+
+    #btn-reset {
+      background: none;
+      border: 1px solid #444;
+      color: #888;
+      padding: 0.3rem 0.8rem;
+      border-radius: 6px;
+      font-size: 0.75rem;
+      cursor: pointer;
+      min-width: unset;
+      flex-direction: row;
+      gap: 0;
+    }
+    #btn-reset:hover { border-color: #888; color: #ccc; filter: none; }
+
+    #log {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+
+    #log li {
+      background: #1e1e1e;
+      border-radius: 10px;
+      padding: 0.7rem 1rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 0.9rem;
+      animation: fadeIn 0.2s ease;
+    }
+
+    #log li .entry-left {
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+    }
+
+    #log li .entry-icon { font-size: 1.3rem; }
+
+    #log li .entry-name { font-weight: 500; }
+
+    #log li .entry-time {
+      font-size: 0.75rem;
+      color: #666;
+    }
+
+    #log li .entry-stats {
+      text-align: right;
+      font-size: 0.8rem;
+      color: #888;
+      line-height: 1.5;
+    }
+
+    #log li .entry-stats span {
+      display: block;
+    }
+
+    .empty-log {
+      color: #444;
+      font-size: 0.9rem;
+      text-align: center;
+      padding: 1.5rem 0;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(-6px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+  </style>
+</head>
+<body>
+
+<h1>Caffeine Tracker</h1>
+
+<div class="buttons">
+  <button id="btn-coffee" onclick="log('coffee')">
+    <span class="icon">☕</span>
+    <span class="label">Cup of Coffee</span>
+    <span class="meta">95 mg · 5 kcal</span>
+  </button>
+  <button id="btn-monster" onclick="log('monster')">
+    <span class="icon">🥤</span>
+    <span class="label">Monster Zero Ultra</span>
+    <span class="meta">150 mg · 10 kcal</span>
+  </button>
+</div>
+
+<div class="totals">
+  <div class="total-card">
+    <div class="value" id="total-caffeine">0</div>
+    <div class="unit">mg caffeine</div>
+  </div>
+  <div class="total-card">
+    <div class="value" id="total-calories">0</div>
+    <div class="unit">kcal</div>
+  </div>
+  <div class="total-card">
+    <div class="value" id="total-drinks">0</div>
+    <div class="unit">drinks today</div>
+  </div>
+</div>
+
+<div class="log-section">
+  <div class="log-header">
+    <h2>Today's log</h2>
+    <button id="btn-reset" onclick="resetLog()">Clear</button>
+  </div>
+  <ul id="log">
+    <li class="empty-log" id="empty-msg">No drinks logged yet.</li>
+  </ul>
+</div>
+
+<script>
+  const DRINKS = {
+    coffee: { name: 'Coffee', icon: '☕', caffeine: 95, calories: 5 },
+    monster: { name: 'Monster Zero Ultra', icon: '🥤', caffeine: 150, calories: 10 },
+  };
+
+  const STORAGE_KEY = 'caffeine-log';
+
+  function todayKey() {
+    return new Date().toISOString().slice(0, 10);
+  }
+
+  function loadEntries() {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (!raw) return [];
+      const { date, entries } = JSON.parse(raw);
+      return date === todayKey() ? entries : [];
+    } catch { return []; }
+  }
+
+  function saveEntries(entries) {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ date: todayKey(), entries }));
+  }
+
+  let entries = loadEntries();
+
+  function log(type) {
+    const drink = DRINKS[type];
+    const entry = { type, time: new Date().toISOString() };
+    entries.unshift(entry);
+    saveEntries(entries);
+    render();
+  }
+
+  function resetLog() {
+    if (!entries.length) return;
+    if (!confirm('Clear today\'s log?')) return;
+    entries = [];
+    saveEntries(entries);
+    render();
+  }
+
+  function formatTime(iso) {
+    return new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  }
+
+  function render() {
+    const totalCaffeine = entries.reduce((s, e) => s + DRINKS[e.type].caffeine, 0);
+    const totalCalories = entries.reduce((s, e) => s + DRINKS[e.type].calories, 0);
+
+    document.getElementById('total-caffeine').textContent = totalCaffeine;
+    document.getElementById('total-calories').textContent = totalCalories;
+    document.getElementById('total-drinks').textContent = entries.length;
+
+    const ul = document.getElementById('log');
+    ul.innerHTML = '';
+
+    if (!entries.length) {
+      ul.innerHTML = '<li class="empty-log" id="empty-msg">No drinks logged yet.</li>';
+      return;
+    }
+
+    entries.forEach(entry => {
+      const drink = DRINKS[entry.type];
+      const li = document.createElement('li');
+      li.innerHTML = `
+        <div class="entry-left">
+          <span class="entry-icon">${drink.icon}</span>
+          <div>
+            <div class="entry-name">${drink.name}</div>
+            <div class="entry-time">${formatTime(entry.time)}</div>
+          </div>
+        </div>
+        <div class="entry-stats">
+          <span>${drink.caffeine} mg caffeine</span>
+          <span>${drink.calories} kcal</span>
+        </div>
+      `;
+      ul.appendChild(li);
+    });
+  }
+
+  render();
+</script>
+
+</body>
+</html>
