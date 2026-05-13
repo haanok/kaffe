@@ -187,6 +187,47 @@
       from { opacity: 0; transform: translateY(-6px); }
       to   { opacity: 1; transform: translateY(0); }
     }
+
+    .info-box {
+      width: 100%;
+      max-width: 480px;
+      border-radius: 14px;
+      padding: 1rem 1.2rem;
+      margin-bottom: 2rem;
+      display: flex;
+      gap: 0.8rem;
+      align-items: flex-start;
+      animation: fadeIn 0.3s ease;
+      transition: background 0.4s, border-color 0.4s;
+      border: 1.5px solid transparent;
+    }
+
+    .info-box .info-icon {
+      font-size: 1.4rem;
+      flex-shrink: 0;
+      margin-top: 0.05rem;
+    }
+
+    .info-box .info-text {
+      font-size: 0.88rem;
+      line-height: 1.6;
+      color: #ddd;
+    }
+
+    .info-box .info-text strong {
+      display: block;
+      font-size: 0.78rem;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      margin-bottom: 0.3rem;
+      opacity: 0.7;
+    }
+
+    .info-box.level-idle   { background: #1a1a2e; border-color: #2a2a4a; }
+    .info-box.level-green  { background: #0d2b1a; border-color: #1e5c35; }
+    .info-box.level-yellow { background: #2b2200; border-color: #5c4500; }
+    .info-box.level-orange { background: #2b1200; border-color: #7a3000; }
+    .info-box.level-red    { background: #2b0000; border-color: #8b0000; }
   </style>
 </head>
 <body>
@@ -218,6 +259,14 @@
   <div class="total-card">
     <div class="value" id="total-drinks">0</div>
     <div class="unit">drinks today</div>
+  </div>
+</div>
+
+<div class="info-box level-idle" id="info-box">
+  <span class="info-icon" id="info-icon">💡</span>
+  <div class="info-text">
+    <strong id="info-label">Did you know?</strong>
+    <span id="info-msg">Log your first drink to get personalised caffeine facts and health tips.</span>
   </div>
 </div>
 
@@ -285,6 +334,7 @@
     document.getElementById('total-caffeine').textContent = totalCaffeine;
     document.getElementById('total-calories').textContent = totalCalories;
     document.getElementById('total-drinks').textContent = entries.length;
+    updateInfoBox(totalCaffeine);
 
     const ul = document.getElementById('log');
     ul.innerHTML = '';
@@ -312,6 +362,112 @@
       `;
       ul.appendChild(li);
     });
+  }
+
+  // ── Info box ─────────────────────────────────────────────────────────────
+
+  const INFO_TIERS = [
+    {
+      maxCaffeine: 0,
+      level: 'idle',
+      icon: '💡',
+      label: 'Did you know?',
+      facts: [
+        'Log your first drink to get personalised caffeine facts and health tips.',
+        'Caffeine is the world\'s most widely consumed psychoactive substance — and the only one freely sold in most countries.',
+        'Coffee was discovered, according to legend, when an Ethiopian goat herder noticed his goats dancing after eating coffee berries.',
+      ],
+    },
+    {
+      maxCaffeine: 100,
+      level: 'green',
+      icon: '✅',
+      label: 'Looking good',
+      facts: [
+        'A small dose of caffeine (40–75 mg) is enough to improve alertness and mood without jitteriness.',
+        'Caffeine works by blocking adenosine receptors in the brain — adenosine is the chemical that makes you feel sleepy.',
+        'Coffee is one of the richest dietary sources of antioxidants in the Western diet, outranking fruits and vegetables for many people.',
+        'Moderate caffeine intake is linked to a reduced risk of Parkinson\'s disease and type 2 diabetes in long-term studies.',
+      ],
+    },
+    {
+      maxCaffeine: 200,
+      level: 'green',
+      icon: '✅',
+      label: 'Still in the clear',
+      facts: [
+        'Caffeine has a half-life of about 5 hours — half of what you drank now will still be in your system at bedtime if you drink in the afternoon.',
+        'Monster Zero Ultra uses sucralose instead of sugar, which is why it has almost no calories despite tasting sweet.',
+        'Caffeine can enhance physical endurance by up to 12% and is used by many athletes as a legal performance aid.',
+        'The LD50 of caffeine (lethal dose for 50% of test subjects) is roughly 150–200 mg per kg of body weight — so a fatal dose for an adult would be around 10 g, or about 100 cups of coffee.',
+      ],
+    },
+    {
+      maxCaffeine: 300,
+      level: 'green',
+      icon: '✅',
+      label: 'Moderate intake',
+      facts: [
+        'You\'re within the safe range. The FDA and most health agencies consider up to 400 mg/day safe for healthy adults.',
+        'Caffeine sensitivity varies widely due to genetics. Variants in the CYP1A2 gene determine whether you\'re a fast or slow caffeine metaboliser.',
+        'Drinking caffeine after 2–3 pm can delay sleep onset by up to an hour, even if you don\'t feel wired.',
+        'Taurine in energy drinks like Monster has a calming effect — it\'s sometimes called nature\'s anti-anxiety amino acid.',
+      ],
+    },
+    {
+      maxCaffeine: 400,
+      level: 'yellow',
+      icon: '⚠️',
+      label: 'Approaching daily limit',
+      facts: [
+        'You\'re getting close to the 400 mg/day limit recommended by health authorities. Consider making your next one a decaf.',
+        'At high doses, caffeine can trigger anxiety, a racing heart, and restlessness — especially in people with anxiety disorders.',
+        'Caffeine can raise blood pressure temporarily by 3–14 mmHg. Worth watching if you have hypertension.',
+        'Exceeding 400 mg regularly can worsen acid reflux and upset the stomach by stimulating acid production.',
+      ],
+    },
+    {
+      maxCaffeine: 600,
+      level: 'orange',
+      icon: '🚨',
+      label: 'Over the recommended limit',
+      facts: [
+        'You\'ve exceeded the 400 mg/day guideline. Common symptoms at this level include jitteriness, headaches, and difficulty concentrating.',
+        'High caffeine intake can disrupt sleep architecture — even if you fall asleep, deep (slow-wave) sleep is reduced.',
+        'Caffeine dependence is real: regular high intake leads to tolerance, and skipping a day can cause withdrawal headaches within 12–24 hours.',
+        'Energy drinks at high intake have been associated with cardiac arrhythmias in some individuals, particularly when combined with exercise.',
+      ],
+    },
+    {
+      maxCaffeine: Infinity,
+      level: 'red',
+      icon: '🛑',
+      label: 'Seriously high intake — slow down',
+      facts: [
+        'Above 600 mg, side effects become likely for most people: rapid heartbeat, anxiety, muscle tremors, and insomnia.',
+        'Doses above 1000 mg/day have been linked to caffeine toxicity: nausea, vomiting, and in rare cases cardiac events.',
+        'At this level, consider stopping for the day. Water, a walk, and rest will help more than another drink.',
+        'If you feel chest pain, a very fast or irregular heartbeat, or severe anxiety after heavy caffeine use, seek medical attention.',
+      ],
+    },
+  ];
+
+  let lastFactIndex = -1;
+
+  function pickFact(facts) {
+    let idx;
+    do { idx = Math.floor(Math.random() * facts.length); } while (facts.length > 1 && idx === lastFactIndex);
+    lastFactIndex = idx;
+    return facts[idx];
+  }
+
+  function updateInfoBox(caffeine) {
+    const tier = INFO_TIERS.find(t => caffeine <= t.maxCaffeine);
+    const box = document.getElementById('info-box');
+    box.className = `info-box level-${tier.level}`;
+    document.getElementById('info-icon').textContent = tier.icon;
+    document.getElementById('info-label').textContent = tier.label;
+    document.getElementById('info-msg').textContent = pickFact(tier.facts);
   }
 
   render();
