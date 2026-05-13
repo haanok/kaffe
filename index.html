@@ -308,12 +308,20 @@ function App() {
   const active = Math.round(activeAt(entries, now));
   const pctLimit = Math.min(100, (total / 400) * 100);
 
-  let coach;
-  if (total === 0)       coach = "Fresh day. Hit the espresso button when you're ready.";
-  else if (total < 200)  coach = "You're cruising. Plenty of headroom for that afternoon coffee.";
-  else if (total < 350)  coach = "Solid intake. Good idea to swap the next one for tea.";
-  else if (total < 500)  coach = "You're at your daily limit. Body is fully fueled.";
-  else                   coach = "Big day on the beans. Maybe wind down with water from here.";
+  const COACH_LEVELS = [
+    { max: 0,   color: T.muted,   text: "Fresh day. Hit the espresso button when you're ready." },
+    { max: 100,  color: T.ok,     text: "Just getting started. Caffeine's barely kicked in yet." },
+    { max: 200,  color: T.ok,     text: "You're cruising. Plenty of headroom for that afternoon coffee." },
+    { max: 300,  color: T.accent, text: "Getting there. Consider spacing out your next one." },
+    { max: 400,  color: T.warn,   text: "Approaching the limit. Switch to tea or decaf for the next round." },
+    { max: 500,  color: T.warn,   text: "You've hit your daily limit. Body is fully fueled — that's enough." },
+    { max: 600,  color: T.danger, text: "Over the limit. Jitters and a rough night's sleep are on the menu." },
+    { max: 800,  color: T.danger, text: "Seriously over. Heart rate elevated, sleep tonight is at real risk." },
+    { max: Infinity, color: '#ff4444', text: "Dangerously high intake. Stop now and drink water — this is not a drill." },
+  ];
+  const coachLevel = COACH_LEVELS.find(l => total <= l.max);
+  const coach = coachLevel.text;
+  const coachColor = coachLevel.color;
 
   const h = new Date(now).getHours();
   const greeting = h < 5 ? "Late one" : h < 12 ? "Good morning" : h < 17 ? "Good afternoon" : h < 21 ? "Good evening" : "Up late";
@@ -329,7 +337,7 @@ function App() {
       <div style={{ paddingTop: 8 }}>
         <div style={{ fontFamily: T.fontMono, fontSize: 10, letterSpacing: '0.18em', textTransform: 'uppercase', color: T.muted, marginBottom: 4 }}>{greeting.toUpperCase()}</div>
         <div style={{ fontFamily: T.fontDisplay, fontSize: T.displaySize, lineHeight: 1.05, color: T.fg, fontWeight: T.displayWeight, letterSpacing: T.displayTracking }}>Today</div>
-        <div style={{ fontFamily: T.fontBody, fontSize: 13, color: T.muted, marginTop: 8, lineHeight: 1.5 }}>{coach}</div>
+        <div style={{ fontFamily: T.fontBody, fontSize: 13, color: coachColor, marginTop: 8, lineHeight: 1.5, transition: 'color 0.6s ease' }}>{coach}</div>
       </div>
 
       {/* Active in body */}
