@@ -6,14 +6,13 @@
   <title>Kaffe</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700&family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@300;400;500;600&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@300;400;500;600&display=swap" rel="stylesheet" />
   <style>
     *, *::before, *::after { box-sizing: border-box; }
     html, body { margin: 0; padding: 0; min-height: 100%; }
     body {
-      background: radial-gradient(120% 80% at 20% -10%, #2c1f12 0%, #1a120b 55%, #110b06 100%);
-      background-attachment: fixed;
-      color: #f4e6d0;
+      background: #13110e;
+      color: #dcd1bb;
       font-family: 'Geist', system-ui, -apple-system, sans-serif;
       -webkit-font-smoothing: antialiased;
     }
@@ -23,8 +22,8 @@
       100% { box-shadow: 0 0 0 0 transparent; }
     }
     input[type="range"] { -webkit-appearance: none; height: 26px; background: transparent; width: 100%; }
-    input[type="range"]::-webkit-slider-runnable-track { height: 4px; border-radius: 2px; background: rgba(255,200,140,0.15); }
-    input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 18px; height: 18px; border-radius: 50%; background: #d99757; margin-top: -7px; border: 2px solid #1a120b; box-shadow: 0 2px 8px rgba(0,0,0,0.4); cursor: pointer; }
+    input[type="range"]::-webkit-slider-runnable-track { height: 3px; border-radius: 1px; background: rgba(220,209,187,0.10); }
+    input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 16px; height: 16px; border-radius: 50%; background: #a37a4f; margin-top: -6px; border: 2px solid #13110e; box-shadow: 0 2px 8px rgba(0,0,0,0.4); cursor: pointer; }
     ::-webkit-scrollbar { display: none; }
     * { scrollbar-width: none; }
   </style>
@@ -37,26 +36,30 @@
   <script type="text/babel" data-presets="env,react">
 const { useState, useEffect, useRef, useMemo, useCallback } = React;
 
-// ── Theme ──────────────────────────────────────────────────────────────────
+// ── Theme — Single Origin, dark ────────────────────────────────────────────
 const T = {
-  fg: '#f4e6d0', muted: '#a89472', accent: '#d99757',
-  warn: '#e0a347', danger: '#e07a55', ok: '#a3c47a',
-  card: 'rgba(255,230,190,0.045)',
-  cardBorder: '1px solid rgba(255,200,140,0.08)',
-  divider: '1px solid rgba(255,200,140,0.06)',
-  track: 'rgba(255,200,140,0.07)',
-  glyphBg: 'rgba(217,151,87,0.12)',
-  coachBg: 'rgba(217,151,87,0.08)',
-  coachBorder: '1px solid rgba(217,151,87,0.22)',
-  sheetBg: '#1f1610',
-  bg: '#1a120b',
-  radius: 18,
-  fontDisplay: "'Instrument Serif', Georgia, serif",
-  fontMono: "'JetBrains Mono', monospace",
+  bg: '#13110e',
+  fg: '#dcd1bb',
+  muted: '#7a6f5d',
+  accent: '#a37a4f',
+  warn: '#b89260',
+  danger: '#b6604a',
+  ok: '#869b6b',
+  card: 'transparent',
+  cardBorder: '1px solid rgba(220,209,187,0.11)',
+  divider: '1px solid rgba(220,209,187,0.09)',
+  track: 'rgba(220,209,187,0.06)',
+  grid: 'rgba(220,209,187,0.10)',
+  glyphBg: 'transparent',
+  coachBorder: '1px solid rgba(163,122,79,0.38)',
+  sheetBg: '#17140f',
+  radius: 2,
+  fontDisplay: "'IBM Plex Mono', monospace",
+  fontMono: "'IBM Plex Mono', monospace",
   fontBody: "'Geist', system-ui, sans-serif",
-  displayWeight: 400,
-  displaySize: 30,
-  displayTracking: '-0.01em',
+  displayWeight: 500,
+  displaySize: 22,
+  displayTracking: '-0.02em',
 };
 
 // ── Data ───────────────────────────────────────────────────────────────────
@@ -108,6 +111,15 @@ function activeAt(entries, tMs) {
   }
   return sum;
 }
+function timeBelow(entries, threshold, fromMs) {
+  let t = fromMs;
+  const end = fromMs + 24 * 60 * 60 * 1000;
+  while (t < end) {
+    if (activeAt(entries, t) < threshold) return t;
+    t += 5 * 60 * 1000;
+  }
+  return null;
+}
 function fmtTime(ms) {
   const d = new Date(ms);
   let h = d.getHours(); const m = d.getMinutes();
@@ -155,7 +167,7 @@ function DrinkGlyph({ cat, size = 20 }) {
   }
 }
 
-// ── Decay curve SVG ────────────────────────────────────────────────────────
+// ── Decay curve SVG (Single Origin: thin line, dashless reference, faint fill)
 function DecayCurve({ entries, now, width, height = 150 }) {
   const earliest = entries.length ? Math.min(...entries.map(e => e.time)) - 30 * 60 * 1000 : now - 60 * 60 * 1000;
   const start = Math.min(earliest, now - 2 * 60 * 60 * 1000);
@@ -193,22 +205,22 @@ function DecayCurve({ entries, now, width, height = 150 }) {
     <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} style={{ display: 'block', overflow: 'visible' }}>
       <defs>
         <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor={T.accent} stopOpacity="0.32" />
+          <stop offset="0%" stopColor={T.accent} stopOpacity="0.08" />
           <stop offset="100%" stopColor={T.accent} stopOpacity="0" />
         </linearGradient>
       </defs>
-      <line x1={pl} x2={width - pr} y1={limitY} y2={limitY} stroke={T.danger} strokeOpacity="0.45" strokeWidth="1" strokeDasharray="2 4" />
+      <line x1={pl} x2={width - pr} y1={limitY} y2={limitY} stroke={T.danger} strokeOpacity="0.45" strokeWidth="1" />
       <text x={width - pr} y={limitY - 4} textAnchor="end" fill={T.danger} fillOpacity="0.7" fontSize="9" fontFamily={T.fontMono} letterSpacing="0.05em">400 MG · DAILY MAX</text>
-      <line x1={pl} x2={width - pr} y1={sleepY} y2={sleepY} stroke={T.muted} strokeOpacity="0.5" strokeWidth="1" strokeDasharray="2 4" />
+      <line x1={pl} x2={width - pr} y1={sleepY} y2={sleepY} stroke={T.muted} strokeOpacity="0.5" strokeWidth="1" />
       <text x={pl} y={sleepY - 4} textAnchor="start" fill={T.muted} fontSize="9" fontFamily={T.fontMono} letterSpacing="0.05em">50 MG · SLEEP-OK</text>
       <path d={area} fill={`url(#${gradId})`} />
-      <path d={line} fill="none" stroke={T.accent} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+      <path d={line} fill="none" stroke={T.accent} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
       {entries.map((e, i) => {
         const ex = xOf(e.time), ey = yOf(e.mg);
-        return <g key={i}><circle cx={ex} cy={ey} r="3" fill={T.accent} /><circle cx={ex} cy={ey} r="6" fill="none" stroke={T.accent} strokeOpacity="0.25" /></g>;
+        return <g key={i}><circle cx={ex} cy={ey} r="2" fill={T.accent} /><circle cx={ex} cy={ey} r="4" fill="none" stroke={T.accent} strokeOpacity="0.25" /></g>;
       })}
       <line x1={nowX} x2={nowX} y1={pt - 4} y2={pt + ih} stroke={T.fg} strokeOpacity="0.5" strokeWidth="1" strokeDasharray="3 3" />
-      <circle cx={nowX} cy={yOf(activeAt(entries, now))} r="4" fill={T.card} stroke={T.accent} strokeWidth="2" />
+      <circle cx={nowX} cy={yOf(activeAt(entries, now))} r="4" fill={T.bg} stroke={T.accent} strokeWidth="2" />
       {hourTicks.map((t, i) => (
         <g key={i}>
           <line x1={t.x} x2={t.x} y1={pt + ih} y2={pt + ih + 3} stroke={T.muted} strokeOpacity="0.5" />
@@ -230,36 +242,36 @@ function BrowseSheet({ open, onClose, onPick }) {
   return (
     <div style={{ position: 'fixed', inset: 0, pointerEvents: open ? 'auto' : 'none', zIndex: 50 }}>
       <div onClick={onClose} style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.5)', opacity: open ? 1 : 0, transition: 'opacity 0.25s' }} />
-      <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, maxHeight: '80vh', background: T.sheetBg, borderTopLeftRadius: 26, borderTopRightRadius: 26, transform: open ? 'translateY(0)' : 'translateY(100%)', transition: 'transform 0.3s cubic-bezier(0.32,0.72,0,1)', display: 'flex', flexDirection: 'column', boxShadow: '0 -20px 50px rgba(0,0,0,0.5)', overflow: 'hidden' }}>
+      <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, maxHeight: '80vh', background: T.sheetBg, borderTopLeftRadius: 14, borderTopRightRadius: 14, borderTop: T.cardBorder, transform: open ? 'translateY(0)' : 'translateY(100%)', transition: 'transform 0.3s cubic-bezier(0.32,0.72,0,1)', display: 'flex', flexDirection: 'column', boxShadow: '0 -20px 50px rgba(0,0,0,0.5)', overflow: 'hidden' }}>
         <div style={{ display: 'flex', justifyContent: 'center', paddingTop: 8, flexShrink: 0 }}>
-          <div style={{ width: 36, height: 4, borderRadius: 2, background: T.muted, opacity: 0.4 }} />
+          <div style={{ width: 36, height: 3, background: T.muted, opacity: 0.4 }} />
         </div>
         <div style={{ padding: '12px 18px 10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
-          <div style={{ fontFamily: T.fontDisplay, fontSize: 22, color: T.fg, fontWeight: T.displayWeight }}>Add a drink</div>
-          <button onClick={onClose} style={{ background: T.track, border: 'none', color: T.fg, width: 30, height: 30, borderRadius: 15, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ fontFamily: T.fontDisplay, fontSize: T.displaySize, color: T.fg, fontWeight: T.displayWeight, letterSpacing: T.displayTracking }}>Add a drink</div>
+          <button onClick={onClose} style={{ background: T.track, border: 'none', color: T.fg, width: 30, height: 30, borderRadius: T.radius, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg>
           </button>
         </div>
         <div style={{ padding: '0 18px 10px', flexShrink: 0 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: T.track, borderRadius: 10, padding: '8px 12px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: T.track, borderRadius: T.radius, padding: '8px 12px' }}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={T.muted} strokeWidth="2" strokeLinecap="round"><circle cx="11" cy="11" r="7" /><path d="M21 21l-4.3-4.3" /></svg>
             <input value={query} onChange={e => setQuery(e.target.value)} placeholder="Search drinks" style={{ flex: 1, background: 'none', border: 'none', outline: 'none', color: T.fg, fontFamily: T.fontBody, fontSize: 13 }} />
           </div>
         </div>
         <div style={{ display: 'flex', gap: 6, padding: '0 18px 10px', overflowX: 'auto', flexShrink: 0 }}>
           {[{ id: 'all', label: 'All' }, ...CATEGORIES].map(c => (
-            <button key={c.id} onClick={() => setCat(c.id)} style={{ padding: '6px 12px', border: 'none', cursor: 'pointer', flexShrink: 0, background: cat === c.id ? T.accent : T.track, color: cat === c.id ? T.bg : T.fg, fontFamily: T.fontMono, fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', borderRadius: 9, transition: 'all 0.15s' }}>{c.label}</button>
+            <button key={c.id} onClick={() => setCat(c.id)} style={{ padding: '6px 12px', border: 'none', cursor: 'pointer', flexShrink: 0, background: cat === c.id ? T.accent : T.track, color: cat === c.id ? T.bg : T.fg, fontFamily: T.fontMono, fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', borderRadius: T.radius, transition: 'all 0.15s' }}>{c.label}</button>
           ))}
         </div>
         <div style={{ flex: 1, overflowY: 'auto', padding: '0 18px 32px' }}>
           {filtered.map((d, i) => (
             <button key={d.id} onClick={() => { onPick(d.id); onClose(); }} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 12, padding: '10px 4px', border: 'none', borderBottom: i < filtered.length - 1 ? T.divider : 'none', background: 'transparent', cursor: 'pointer', color: T.fg, textAlign: 'left' }}>
-              <div style={{ width: 36, height: 36, borderRadius: 10, background: T.glyphBg, display: 'flex', alignItems: 'center', justifyContent: 'center', color: T.accent, flexShrink: 0 }}><DrinkGlyph cat={d.cat} /></div>
+              <div style={{ width: 36, height: 36, borderRadius: T.radius, background: T.glyphBg, border: T.cardBorder, display: 'flex', alignItems: 'center', justifyContent: 'center', color: T.accent, flexShrink: 0 }}><DrinkGlyph cat={d.cat} /></div>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontFamily: T.fontBody, fontSize: 14, fontWeight: 500, color: T.fg, marginBottom: 2 }}>{d.name}</div>
+                <div style={{ fontFamily: T.fontBody, fontSize: 13.5, fontWeight: 500, color: T.fg, marginBottom: 2 }}>{d.name}</div>
                 <div style={{ fontFamily: T.fontMono, fontSize: 10, color: T.muted, letterSpacing: '0.04em' }}>{d.serving} · {d.mg} mg · {d.kcal} kcal</div>
               </div>
-              <div style={{ fontFamily: T.fontMono, fontSize: 13, color: T.accent }}>+</div>
+              <div style={{ fontFamily: T.fontMono, fontSize: 11, color: T.accent, letterSpacing: '0.06em' }}>+</div>
             </button>
           ))}
           {filtered.length === 0 && <div style={{ textAlign: 'center', padding: 40, color: T.muted, fontFamily: T.fontBody, fontSize: 13 }}>No drinks match.</div>}
@@ -292,47 +304,47 @@ function AmountSheet({ open, drinkId, onClose, onConfirm }) {
   return (
     <div style={{ position: 'fixed', inset: 0, pointerEvents: open ? 'auto' : 'none', zIndex: 60 }}>
       <div onClick={onClose} style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.55)', opacity: open ? 1 : 0, transition: 'opacity 0.25s' }} />
-      <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, background: T.sheetBg, borderTopLeftRadius: 26, borderTopRightRadius: 26, transform: open ? 'translateY(0)' : 'translateY(100%)', transition: 'transform 0.3s cubic-bezier(0.32,0.72,0,1)', boxShadow: '0 -20px 50px rgba(0,0,0,0.5)', paddingBottom: 28 }}>
+      <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, background: T.sheetBg, borderTopLeftRadius: 14, borderTopRightRadius: 14, borderTop: T.cardBorder, transform: open ? 'translateY(0)' : 'translateY(100%)', transition: 'transform 0.3s cubic-bezier(0.32,0.72,0,1)', boxShadow: '0 -20px 50px rgba(0,0,0,0.5)', paddingBottom: 28 }}>
         <div style={{ display: 'flex', justifyContent: 'center', paddingTop: 8 }}>
-          <div style={{ width: 36, height: 4, borderRadius: 2, background: T.muted, opacity: 0.4 }} />
+          <div style={{ width: 36, height: 3, background: T.muted, opacity: 0.4 }} />
         </div>
         {d && (
           <>
             <div style={{ padding: '14px 22px 4px', display: 'flex', alignItems: 'center', gap: 14 }}>
-              <div style={{ width: 46, height: 46, borderRadius: 12, background: T.glyphBg, display: 'flex', alignItems: 'center', justifyContent: 'center', color: T.accent, flexShrink: 0 }}><DrinkGlyph cat={d.cat} size={24} /></div>
+              <div style={{ width: 44, height: 44, borderRadius: T.radius, border: T.cardBorder, display: 'flex', alignItems: 'center', justifyContent: 'center', color: T.accent, flexShrink: 0 }}><DrinkGlyph cat={d.cat} size={22} /></div>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontFamily: T.fontDisplay, fontSize: 22, color: T.fg, fontWeight: T.displayWeight, lineHeight: 1.1 }}>{d.name}</div>
-                <div style={{ fontFamily: T.fontMono, fontSize: 10, color: T.muted, letterSpacing: '0.04em', marginTop: 2 }}>{d.serving} · {d.mg} mg · {d.kcal} kcal per serving</div>
+                <div style={{ fontFamily: T.fontDisplay, fontSize: T.displaySize, color: T.fg, fontWeight: T.displayWeight, letterSpacing: T.displayTracking, lineHeight: 1.15 }}>{d.name}</div>
+                <div style={{ fontFamily: T.fontMono, fontSize: 10, color: T.muted, letterSpacing: '0.06em', marginTop: 4, textTransform: 'uppercase' }}>{d.serving} · {d.mg} mg · {d.kcal} kcal / serving</div>
               </div>
-              <button onClick={onClose} style={{ background: T.track, border: 'none', color: T.fg, width: 30, height: 30, borderRadius: 15, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              <button onClick={onClose} style={{ background: T.track, border: 'none', color: T.fg, width: 30, height: 30, borderRadius: T.radius, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg>
               </button>
             </div>
-            <div style={{ padding: '14px 22px 4px', fontFamily: T.fontMono, fontSize: 10, letterSpacing: '0.14em', textTransform: 'uppercase', color: T.muted }}>How much?</div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, padding: '8px 22px 0' }}>
+            <div style={{ padding: '18px 22px 6px', fontFamily: T.fontMono, fontSize: 10, letterSpacing: '0.16em', textTransform: 'uppercase', color: T.muted }}>How much?</div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 6, padding: '8px 22px 0' }}>
               {PORTIONS.map(p => {
                 const sel = Math.abs(p.value - amount) < 0.001;
                 return (
-                  <button key={p.value} onClick={() => setAmount(p.value)} style={{ padding: '14px 8px', borderRadius: 14, border: sel ? `1px solid ${T.accent}` : T.cardBorder, background: sel ? 'rgba(217,151,87,0.18)' : T.card, color: sel ? T.accent : T.fg, fontFamily: T.fontDisplay, fontSize: 26, fontWeight: T.displayWeight, cursor: 'pointer', transition: 'all 0.15s' }}>
+                  <button key={p.value} onClick={() => setAmount(p.value)} style={{ padding: '16px 8px', borderRadius: T.radius, border: sel ? `1px solid ${T.accent}` : T.cardBorder, background: sel ? 'rgba(163,122,79,0.10)' : 'transparent', color: sel ? T.accent : T.fg, fontFamily: T.fontDisplay, fontSize: 22, fontWeight: T.displayWeight, letterSpacing: T.displayTracking, cursor: 'pointer', transition: 'all 0.15s' }}>
                     {p.label}
                   </button>
                 );
               })}
             </div>
-            <div style={{ padding: '14px 22px 4px', display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div style={{ padding: '18px 22px 4px', display: 'flex', alignItems: 'center', gap: 10 }}>
               <input type="range" min="0.1" max="3" step="0.05" value={amount} onChange={e => setAmount(Number(e.target.value))} style={{ flex: 1 }} />
               <span style={{ fontFamily: T.fontMono, fontSize: 11, color: T.muted, letterSpacing: '0.04em', minWidth: 44, textAlign: 'right' }}>×{amount.toFixed(2).replace(/\.?0+$/, '')}</span>
             </div>
-            <div style={{ padding: '14px 22px 0', display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-              <div style={{ fontFamily: T.fontMono, fontSize: 10, letterSpacing: '0.14em', textTransform: 'uppercase', color: T.muted }}>You're logging</div>
+            <div style={{ padding: '14px 22px 0', display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', borderTop: T.divider, marginTop: 4, paddingTop: 14 }}>
+              <div style={{ fontFamily: T.fontMono, fontSize: 10, letterSpacing: '0.16em', textTransform: 'uppercase', color: T.muted }}>Logging</div>
               <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
-                <span style={{ fontFamily: T.fontDisplay, fontSize: 28, color: T.fg, fontWeight: T.displayWeight, fontFeatureSettings: '"tnum"' }}>{mg}</span>
+                <span style={{ fontFamily: T.fontDisplay, fontSize: 26, color: T.fg, fontWeight: T.displayWeight, letterSpacing: T.displayTracking, fontFeatureSettings: '"tnum"' }}>{mg}</span>
                 <span style={{ fontFamily: T.fontMono, fontSize: 11, color: T.muted }}>mg</span>
                 <span style={{ fontFamily: T.fontMono, fontSize: 11, color: T.muted, marginLeft: 6 }}>· {kcal} kcal</span>
               </div>
             </div>
             <div style={{ padding: '16px 22px 0' }}>
-              <button onClick={() => { onConfirm(d.id, amount); onClose(); }} style={{ width: '100%', padding: '14px', borderRadius: 14, border: 'none', background: T.accent, color: T.bg, fontFamily: T.fontMono, fontSize: 11, fontWeight: 600, letterSpacing: '0.16em', textTransform: 'uppercase', cursor: 'pointer' }}>
+              <button onClick={() => { onConfirm(d.id, amount); onClose(); }} style={{ width: '100%', padding: '14px', borderRadius: T.radius, border: 'none', background: T.accent, color: T.bg, fontFamily: T.fontMono, fontSize: 11, fontWeight: 600, letterSpacing: '0.18em', textTransform: 'uppercase', cursor: 'pointer' }}>
                 Add to log
               </button>
             </div>
@@ -381,78 +393,75 @@ function App() {
   const total = entries.reduce((s, e) => s + e.mg, 0);
   const kcal = entries.reduce((s, e) => s + e.kcal, 0);
   const active = Math.round(activeAt(entries, now));
-  const pctLimit = Math.min(100, (total / 400) * 100);
+  const safeAt = timeBelow(entries, 50, now);
 
-  const COACH_LEVELS = [
-    { max: 0,   color: T.muted,   text: "Fresh day. Hit the espresso button when you're ready." },
-    { max: 100,  color: T.ok,     text: "Just getting started. Caffeine's barely kicked in yet." },
-    { max: 200,  color: T.ok,     text: "You're cruising. Plenty of headroom for that afternoon coffee." },
-    { max: 300,  color: T.accent, text: "Getting there. Consider spacing out your next one." },
-    { max: 400,  color: T.warn,   text: "Approaching the limit. Switch to tea or decaf for the next round." },
-    { max: 500,  color: T.warn,   text: "You've hit your daily limit. Body is fully fueled — that's enough." },
-    { max: 600,  color: T.danger, text: "Over the limit. Jitters and a rough night's sleep are on the menu." },
-    { max: 800,  color: T.danger, text: "Seriously over. Heart rate elevated, sleep tonight is at real risk." },
-    { max: Infinity, color: '#ff4444', text: "Dangerously high intake. Stop now and drink water — this is not a drill." },
-  ];
-  const coachLevel = COACH_LEVELS.find(l => total <= l.max);
-  const coach = coachLevel.text;
-  const coachColor = coachLevel.color;
+  let coach;
+  if (total === 0) coach = "Fresh day. Tap a drink when you're ready.";
+  else if (total < 200) coach = "Plenty of room left today.";
+  else if (total < 350) coach = "Solid pace — maybe make the next one tea.";
+  else if (total < 500) coach = "Right at the daily limit. Body is fully fueled.";
+  else coach = "Big day on the beans. Water from here.";
 
   const h = new Date(now).getHours();
   const greeting = h < 5 ? "Late one" : h < 12 ? "Good morning" : h < 17 ? "Good afternoon" : h < 21 ? "Good evening" : "Up late";
 
   const QUICK = ['drip', 'dbl-espresso', 'latte', 'matcha', 'monster-zero', 'red-bull'];
 
-  const curveWidth = width - 36; // card padding 18px each side
+  const curveWidth = width - 36 - 32; // page padding + card padding
+
+  const headlineColor = total > 400 ? T.danger : T.fg;
+  const overColor = total < 300 ? T.ok : total < 400 ? T.warn : T.danger;
 
   return (
-    <div style={{ maxWidth: 480, margin: '0 auto', padding: '24px 18px 60px', display: 'flex', flexDirection: 'column', gap: 18 }}>
+    <div style={{ maxWidth: 480, margin: '0 auto', padding: '24px 18px 60px', display: 'flex', flexDirection: 'column', gap: 16 }}>
 
       {/* Greeting */}
-      <div style={{ paddingTop: 8 }}>
+      <div style={{ paddingTop: 6 }}>
         <div style={{ fontFamily: T.fontMono, fontSize: 10, letterSpacing: '0.18em', textTransform: 'uppercase', color: T.muted, marginBottom: 4 }}>{greeting.toUpperCase()}</div>
-        <div style={{ fontFamily: T.fontDisplay, fontSize: T.displaySize, lineHeight: 1.05, color: T.fg, fontWeight: T.displayWeight, letterSpacing: T.displayTracking }}>Today</div>
-        <div style={{ fontFamily: T.fontBody, fontSize: 13, color: coachColor, marginTop: 8, lineHeight: 1.5, transition: 'color 0.6s ease' }}>{coach}</div>
+        <div style={{ fontFamily: T.fontDisplay, fontSize: 30, lineHeight: 1.05, color: T.fg, fontWeight: T.displayWeight, letterSpacing: T.displayTracking }}>Today</div>
       </div>
 
-      {/* Active in body */}
-      <Card padding={18}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 4 }}>
-          <div style={{ fontFamily: T.fontMono, fontSize: 10, letterSpacing: '0.14em', textTransform: 'uppercase', color: T.muted }}>In your body right now</div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <span style={{ width: 6, height: 6, borderRadius: '50%', background: T.accent, display: 'block', animation: 'kaffePulse 2s ease-out infinite' }} />
-            <span style={{ fontFamily: T.fontMono, fontSize: 9, letterSpacing: '0.18em', textTransform: 'uppercase', color: T.muted }}>LIVE</span>
+      {/* Hero — intake + active + curve + coach line */}
+      <Card padding={16}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14 }}>
+          <div>
+            <div style={{ fontFamily: T.fontMono, fontSize: 10, letterSpacing: '0.14em', textTransform: 'uppercase', color: T.muted, marginBottom: 4 }}>Today's intake</div>
+            <div style={{ fontFamily: T.fontDisplay, fontSize: 38, lineHeight: 1, color: headlineColor, fontWeight: T.displayWeight, letterSpacing: T.displayTracking, fontFeatureSettings: '"tnum"' }}>{total}</div>
+            <div style={{ fontFamily: T.fontMono, fontSize: 10, color: T.muted, marginTop: 4, letterSpacing: '0.04em' }}>of 400 mg</div>
+          </div>
+          <div style={{ textAlign: 'right' }}>
+            <div style={{ fontFamily: T.fontMono, fontSize: 10, letterSpacing: '0.14em', textTransform: 'uppercase', color: T.muted, marginBottom: 4 }}>Active now</div>
+            <div style={{ fontFamily: T.fontDisplay, fontSize: 28, lineHeight: 1, color: T.fg, fontWeight: T.displayWeight, letterSpacing: T.displayTracking, fontFeatureSettings: '"tnum"' }}>{active}</div>
+            <div style={{ fontFamily: T.fontMono, fontSize: 10, color: T.muted, marginTop: 4, letterSpacing: '0.04em' }}>mg in body</div>
           </div>
         </div>
-        <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginTop: 6, marginBottom: 8 }}>
-          <span style={{ fontFamily: T.fontDisplay, fontSize: 64, lineHeight: 1, color: T.fg, fontWeight: T.displayWeight, letterSpacing: T.displayTracking, fontFeatureSettings: '"tnum"' }}>{active}</span>
-          <span style={{ fontFamily: T.fontMono, fontSize: 13, color: T.muted }}>mg active</span>
-        </div>
         <DecayCurve entries={entries} now={now} width={curveWidth} height={150} />
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 10, paddingTop: 10, borderTop: T.divider }}>
+          <span style={{ fontFamily: T.fontBody, fontSize: 12.5, color: T.muted, lineHeight: 1.4, flex: 1, paddingRight: 12 }}>{coach}</span>
+          <div style={{ fontFamily: T.fontMono, fontSize: 9.5, letterSpacing: '0.16em', textTransform: 'uppercase', color: overColor, fontWeight: 600, whiteSpace: 'nowrap' }}>
+            {total === 0 ? 'Untouched' : total < 400 ? `${Math.round((total/400) * 100)}% used` : `+${total - 400} mg over`}
+          </div>
+        </div>
       </Card>
 
-      {/* Stats row */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
-        {[['Today, total', total, 'mg'], ['Calories', kcal, 'kcal'], ['Drinks', entries.length, '']].map(([label, value, unit]) => (
-          <Card key={label} padding={12}>
-            <div style={{ fontFamily: T.fontMono, fontSize: 9, letterSpacing: '0.12em', textTransform: 'uppercase', color: T.muted, marginBottom: 4 }}>{label}</div>
-            <div style={{ display: 'flex', alignItems: 'baseline', gap: 4 }}>
-              <span style={{ fontFamily: T.fontDisplay, fontSize: 26, lineHeight: 1, color: T.fg, fontWeight: T.displayWeight, fontFeatureSettings: '"tnum"' }}>{value}</span>
-              {unit && <span style={{ fontFamily: T.fontMono, fontSize: 11, color: T.muted }}>{unit}</span>}
-            </div>
-          </Card>
-        ))}
+      {/* Mini stats row */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
+        <Card padding={12}>
+          <div style={{ fontFamily: T.fontMono, fontSize: 9, letterSpacing: '0.12em', textTransform: 'uppercase', color: T.muted, marginBottom: 4 }}>Calories</div>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 4 }}>
+            <span style={{ fontFamily: T.fontDisplay, fontSize: 22, lineHeight: 1, color: T.fg, fontWeight: T.displayWeight, fontFeatureSettings: '"tnum"' }}>{kcal}</span>
+            <span style={{ fontFamily: T.fontMono, fontSize: 10, color: T.muted }}>kcal</span>
+          </div>
+        </Card>
+        <Card padding={12}>
+          <div style={{ fontFamily: T.fontMono, fontSize: 9, letterSpacing: '0.12em', textTransform: 'uppercase', color: T.muted, marginBottom: 4 }}>Drinks</div>
+          <div style={{ fontFamily: T.fontDisplay, fontSize: 22, lineHeight: 1, color: T.fg, fontWeight: T.displayWeight, fontFeatureSettings: '"tnum"' }}>{entries.length}</div>
+        </Card>
+        <Card padding={12}>
+          <div style={{ fontFamily: T.fontMono, fontSize: 9, letterSpacing: '0.12em', textTransform: 'uppercase', color: T.muted, marginBottom: 4 }}>Sleep-safe</div>
+          <div style={{ fontFamily: T.fontDisplay, fontSize: 18, lineHeight: 1, color: T.fg, fontWeight: T.displayWeight }}>{safeAt ? fmtTime(safeAt) : '—'}</div>
+        </Card>
       </div>
-
-      {/* Daily limit bar */}
-      <Card padding={14}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', fontFamily: T.fontMono, fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', color: T.muted, marginBottom: 8 }}>
-          <span>Daily limit</span><span>{total} / 400 mg</span>
-        </div>
-        <div style={{ height: 6, borderRadius: 3, background: T.track, overflow: 'hidden' }}>
-          <div style={{ height: '100%', width: `${pctLimit}%`, background: pctLimit < 75 ? T.accent : pctLimit < 100 ? T.warn : T.danger, borderRadius: 3, transition: 'width 0.5s ease' }} />
-        </div>
-      </Card>
 
       {/* Quick log */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -469,7 +478,7 @@ function App() {
                 onMouseDown={e => e.currentTarget.style.transform = 'scale(0.97)'}
                 onMouseUp={e => e.currentTarget.style.transform = 'scale(1)'}
                 onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}>
-                <div style={{ width: 36, height: 36, borderRadius: 10, background: T.glyphBg, display: 'flex', alignItems: 'center', justifyContent: 'center', color: T.accent, flexShrink: 0 }}><DrinkGlyph cat={d.cat} /></div>
+                <div style={{ width: 36, height: 36, borderRadius: T.radius, border: T.cardBorder, display: 'flex', alignItems: 'center', justifyContent: 'center', color: T.accent, flexShrink: 0 }}><DrinkGlyph cat={d.cat} /></div>
                 <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
                   <span style={{ fontFamily: T.fontBody, fontSize: 13, color: T.fg, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{d.name}</span>
                   <span style={{ fontFamily: T.fontMono, fontSize: 10, color: T.muted, letterSpacing: '0.04em' }}>{d.mg} mg · {d.kcal} kcal</span>
@@ -495,12 +504,12 @@ function App() {
               const timeVal = `${t.getHours().toString().padStart(2,'0')}:${t.getMinutes().toString().padStart(2,'0')}`;
               return (
                 <div key={e.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', borderBottom: i < arr.length - 1 ? T.divider : 'none' }}>
-                  <div style={{ width: 36, height: 36, borderRadius: 10, background: T.glyphBg, display: 'flex', alignItems: 'center', justifyContent: 'center', color: T.accent, flexShrink: 0 }}><DrinkGlyph cat={d.cat} /></div>
+                  <div style={{ width: 36, height: 36, borderRadius: T.radius, border: T.cardBorder, display: 'flex', alignItems: 'center', justifyContent: 'center', color: T.accent, flexShrink: 0 }}><DrinkGlyph cat={d.cat} /></div>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontFamily: T.fontBody, fontSize: 13, fontWeight: 500, color: T.fg, marginBottom: 4, display: 'flex', alignItems: 'center', gap: 6 }}>
                       <span>{d.name}</span>
                       {e.amount && Math.abs(e.amount - 1) > 0.001 && (
-                        <span style={{ fontFamily: T.fontMono, fontSize: 10, color: T.accent, background: T.glyphBg, padding: '1px 6px', borderRadius: 6, letterSpacing: '0.04em' }}>{portionLabel(e.amount)}×</span>
+                        <span style={{ fontFamily: T.fontMono, fontSize: 10, color: T.accent, border: `1px solid ${T.accent}55`, padding: '0 5px', borderRadius: T.radius, letterSpacing: '0.04em' }}>{portionLabel(e.amount)}×</span>
                       )}
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -508,7 +517,7 @@ function App() {
                         type="time"
                         value={timeVal}
                         onChange={ev => updateEntryTime(e.id, ev.target.value)}
-                        style={{ fontFamily: T.fontMono, fontSize: 10, color: T.accent, background: T.glyphBg, border: 'none', borderRadius: 6, padding: '2px 6px', cursor: 'pointer', letterSpacing: '0.04em', outline: 'none', width: 72 }}
+                        style={{ fontFamily: T.fontMono, fontSize: 10, color: T.accent, background: T.track, border: 'none', borderRadius: T.radius, padding: '2px 6px', cursor: 'pointer', letterSpacing: '0.04em', outline: 'none', width: 72 }}
                       />
                       <span style={{ fontFamily: T.fontMono, fontSize: 10, color: T.muted, letterSpacing: '0.04em' }}>{e.mg} mg · {e.kcal} kcal</span>
                     </div>
