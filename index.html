@@ -31,8 +31,11 @@
     input[type="range"] { -webkit-appearance: none; height: 26px; background: transparent; width: 100%; }
     input[type="range"]::-webkit-slider-runnable-track { height: 3px; border-radius: 1px; background: rgba(220,209,187,0.10); }
     input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 16px; height: 16px; border-radius: 50%; background: #a37a4f; margin-top: -6px; border: 2px solid #13110e; box-shadow: 0 2px 8px rgba(0,0,0,0.4); cursor: pointer; }
-    ::-webkit-scrollbar { display: none; }
-    * { scrollbar-width: none; }
+    ::-webkit-scrollbar { width: 8px; height: 8px; }
+    ::-webkit-scrollbar-thumb { background: rgba(125,111,93,0.3); border-radius: 4px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    .kaffe-mobile ::-webkit-scrollbar { display: none; }
+    .kaffe-mobile { scrollbar-width: none; }
   </style>
   <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" crossorigin="anonymous"></script>
   <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" crossorigin="anonymous"></script>
@@ -57,6 +60,7 @@ const T = {
   divider: '1px solid rgba(220,209,187,0.09)',
   track: 'rgba(220,209,187,0.06)',
   grid: 'rgba(220,209,187,0.10)',
+  bar: 'rgba(163,122,79,0.55)',
   glyphBg: 'transparent',
   coachBorder: '1px solid rgba(163,122,79,0.38)',
   sheetBg: '#17140f',
@@ -110,6 +114,7 @@ const DRINKS = [
 const DRINK_BY_ID = Object.fromEntries(DRINKS.map(d => [d.id, d]));
 const HALF_LIFE_MS = 5 * 60 * 60 * 1000;
 
+// ── Math / helpers ─────────────────────────────────────────────────────────
 function activeAt(entries, tMs) {
   let sum = 0;
   for (const e of entries) {
@@ -134,6 +139,25 @@ function fmtTime(ms) {
   h = h % 12; if (h === 0) h = 12;
   return `${h}:${m.toString().padStart(2, '0')} ${ap}`;
 }
+function makeWeekHistory() {
+  return [
+    { day: 'Mon', mg: 340 },
+    { day: 'Tue', mg: 290 },
+    { day: 'Wed', mg: 420 },
+    { day: 'Thu', mg: 180 },
+    { day: 'Fri', mg: 510 },
+    { day: 'Sat', mg: 260 },
+    { day: 'Sun', mg: 403 },
+  ];
+}
+function makeMonthHistory() {
+  return [
+    { week: 'W1', mg: 295 },
+    { week: 'W2', mg: 340 },
+    { week: 'W3', mg: 280 },
+    { week: 'W4', mg: 360 },
+  ];
+}
 
 // ── Storage ────────────────────────────────────────────────────────────────
 const STORE_KEY = 'kaffe-log-v1';
@@ -150,7 +174,7 @@ function saveEntries(entries) {
   localStorage.setItem(STORE_KEY, JSON.stringify({ date: todayKey(), entries }));
 }
 
-// ── Live clock ─────────────────────────────────────────────────────────────
+// ── Hooks ──────────────────────────────────────────────────────────────────
 function useLiveNow() {
   const [now, setNow] = useState(Date.now);
   useEffect(() => {
@@ -158,6 +182,32 @@ function useLiveNow() {
     return () => clearInterval(iv);
   }, []);
   return now;
+}
+function useIsDesktop() {
+  const get = () => typeof window !== 'undefined' && window.matchMedia('(min-width: 1024px)').matches;
+  const [d, setD] = useState(get);
+  useEffect(() => {
+    const mql = window.matchMedia('(min-width: 1024px)');
+    const h = e => setD(e.matches);
+    mql.addEventListener('change', h);
+    return () => mql.removeEventListener('change', h);
+  }, []);
+  return d;
+}
+function useElementWidth(deps = []) {
+  const ref = useRef(null);
+  const [w, setW] = useState(0);
+  useEffect(() => {
+    if (!ref.current) return;
+    const el = ref.current;
+    const update = () => setW(el.clientWidth);
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => ro.disconnect();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, deps);
+  return [ref, w];
 }
 
 // ── Drink glyph icons ──────────────────────────────────────────────────────
@@ -174,8 +224,8 @@ function DrinkGlyph({ cat, size = 20 }) {
   }
 }
 
-// ── Decay curve SVG (Single Origin: thin line, dashless reference, faint fill)
-function DecayCurve({ entries, now, width, height = 150 }) {
+// ── Decay curve ────────────────────────────────────────────────────────────
+function DecayCurve({ entries, now, width, height = 150, showLabels = true }) {
   const earliest = entries.length ? Math.min(...entries.map(e => e.time)) - 30 * 60 * 1000 : now - 60 * 60 * 1000;
   const start = Math.min(earliest, now - 2 * 60 * 60 * 1000);
   const end = now + 12 * 60 * 60 * 1000;
@@ -207,7 +257,7 @@ function DecayCurve({ entries, now, width, height = 150 }) {
     hr = hr % 12; if (hr === 0) hr = 12;
     hourTicks.push({ x: xOf(t), label: `${hr}${ap}` });
   }
-  const gradId = 'cg';
+  const gradId = useMemo(() => 'cg-' + Math.random().toString(36).slice(2, 8), []);
   return (
     <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} style={{ display: 'block', overflow: 'visible' }}>
       <defs>
@@ -217,9 +267,9 @@ function DecayCurve({ entries, now, width, height = 150 }) {
         </linearGradient>
       </defs>
       <line x1={pl} x2={width - pr} y1={limitY} y2={limitY} stroke={T.danger} strokeOpacity="0.45" strokeWidth="1" />
-      <text x={width - pr} y={limitY - 4} textAnchor="end" fill={T.danger} fillOpacity="0.7" fontSize="9" fontFamily={T.fontMono} letterSpacing="0.05em">400 MG · DAILY MAX</text>
+      {showLabels && <text x={width - pr} y={limitY - 4} textAnchor="end" fill={T.danger} fillOpacity="0.7" fontSize="9" fontFamily={T.fontMono} letterSpacing="0.05em">400 MG · DAILY MAX</text>}
       <line x1={pl} x2={width - pr} y1={sleepY} y2={sleepY} stroke={T.muted} strokeOpacity="0.5" strokeWidth="1" />
-      <text x={pl} y={sleepY - 4} textAnchor="start" fill={T.muted} fontSize="9" fontFamily={T.fontMono} letterSpacing="0.05em">50 MG · SLEEP-OK</text>
+      {showLabels && <text x={pl} y={sleepY - 4} textAnchor="start" fill={T.muted} fontSize="9" fontFamily={T.fontMono} letterSpacing="0.05em">50 MG · SLEEP-OK</text>}
       <path d={area} fill={`url(#${gradId})`} />
       <path d={line} fill="none" stroke={T.accent} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
       {entries.map((e, i) => {
@@ -238,7 +288,12 @@ function DecayCurve({ entries, now, width, height = 150 }) {
   );
 }
 
-// ── Browse sheet ───────────────────────────────────────────────────────────
+// ── Card (shared) ──────────────────────────────────────────────────────────
+function Card({ children, style = {}, padding = 16 }) {
+  return <div style={{ background: T.card, border: T.cardBorder, borderRadius: T.radius, padding, ...style }}>{children}</div>;
+}
+
+// ── Browse — mobile bottom sheet ───────────────────────────────────────────
 function BrowseSheet({ open, onClose, onPick }) {
   const [cat, setCat] = useState('all');
   const [query, setQuery] = useState('');
@@ -288,7 +343,63 @@ function BrowseSheet({ open, onClose, onPick }) {
   );
 }
 
-// ── Amount sheet ───────────────────────────────────────────────────────────
+// ── Browse — desktop centered modal ───────────────────────────────────────
+function BrowseModal({ open, onClose, onPick }) {
+  const [cat, setCat] = useState('all');
+  const [query, setQuery] = useState('');
+  if (!open) return null;
+  const filtered = DRINKS.filter(d =>
+    (cat === 'all' || d.cat === cat) &&
+    (query === '' || d.name.toLowerCase().includes(query.toLowerCase()))
+  );
+  return (
+    <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50 }}>
+      <div onClick={e => e.stopPropagation()} style={{ width: 720, maxWidth: 'calc(100vw - 64px)', maxHeight: '80vh', background: T.bg, border: T.cardBorder, borderRadius: T.radius, display: 'flex', flexDirection: 'column', boxShadow: '0 30px 80px rgba(0,0,0,0.5)', overflow: 'hidden' }}>
+        <div style={{ padding: '22px 26px 16px', borderBottom: T.divider }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+            <div style={{ fontFamily: T.fontDisplay, fontSize: 22, color: T.fg, fontWeight: T.displayWeight, letterSpacing: T.displayTracking }}>Add a drink</div>
+            <button onClick={onClose} style={{ background: T.track, border: 'none', color: T.fg, width: 30, height: 30, borderRadius: T.radius, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg>
+            </button>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: T.track, borderRadius: T.radius, padding: '10px 14px' }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={T.muted} strokeWidth="2" strokeLinecap="round"><circle cx="11" cy="11" r="7" /><path d="M21 21l-4.3-4.3" /></svg>
+            <input autoFocus value={query} onChange={e => setQuery(e.target.value)} placeholder="Search drinks" style={{ flex: 1, background: 'none', border: 'none', outline: 'none', color: T.fg, fontFamily: T.fontBody, fontSize: 13 }} />
+          </div>
+          <div style={{ display: 'flex', gap: 6, marginTop: 14, overflowX: 'auto' }}>
+            {[{ id: 'all', label: 'All' }, ...CATEGORIES].map(c => (
+              <button key={c.id} onClick={() => setCat(c.id)} style={{ padding: '6px 12px', border: 'none', cursor: 'pointer', flexShrink: 0, background: cat === c.id ? T.accent : T.track, color: cat === c.id ? T.bg : T.fg, fontFamily: T.fontMono, fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', borderRadius: T.radius, transition: 'all 0.15s' }}>{c.label}</button>
+            ))}
+          </div>
+        </div>
+        <div style={{ flex: 1, overflowY: 'auto', padding: '6px 14px 16px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 0 }}>
+          {filtered.map(d => (
+            <button key={d.id} onClick={() => { onPick(d.id); onClose(); }} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 12, padding: '12px', background: 'transparent', border: 'none', borderRadius: T.radius, cursor: 'pointer', color: T.fg, textAlign: 'left', transition: 'background 0.15s' }}
+              onMouseEnter={e => e.currentTarget.style.background = T.track}
+              onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+              <div style={{ color: T.accent, flexShrink: 0 }}><DrinkGlyph cat={d.cat} size={22} /></div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontFamily: T.fontBody, fontSize: 13, fontWeight: 500, color: T.fg, marginBottom: 2 }}>{d.name}</div>
+                <div style={{ fontFamily: T.fontMono, fontSize: 10, color: T.muted, letterSpacing: '0.04em' }}>{d.serving} · {d.mg} mg · {d.kcal} kcal</div>
+              </div>
+              <div style={{ fontFamily: T.fontMono, fontSize: 14, color: T.accent }}>+</div>
+            </button>
+          ))}
+          {filtered.length === 0 && <div style={{ gridColumn: '1 / -1', textAlign: 'center', padding: 40, color: T.muted, fontFamily: T.fontBody, fontSize: 13 }}>No drinks match.</div>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Responsive wrapper
+function Browse({ open, onClose, onPick, isDesktop }) {
+  return isDesktop
+    ? <BrowseModal open={open} onClose={onClose} onPick={onPick} />
+    : <BrowseSheet open={open} onClose={onClose} onPick={onPick} />;
+}
+
+// ── Amount picker shared bits ──────────────────────────────────────────────
 const PORTIONS = [
   { value: 0.25, label: '¼' },
   { value: 0.5,  label: '½' },
@@ -302,12 +413,58 @@ function portionLabel(amount) {
   if (p) return p.label;
   return amount.toFixed(2).replace(/\.?0+$/, '');
 }
+function AmountBody({ d, amount, setAmount, onClose, onConfirm }) {
+  const mg = Math.round(d.mg * amount);
+  const kcal = Math.round(d.kcal * amount);
+  return (
+    <>
+      <div style={{ padding: '14px 22px 4px', display: 'flex', alignItems: 'center', gap: 14 }}>
+        <div style={{ width: 44, height: 44, borderRadius: T.radius, border: T.cardBorder, display: 'flex', alignItems: 'center', justifyContent: 'center', color: T.accent, flexShrink: 0 }}><DrinkGlyph cat={d.cat} size={22} /></div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontFamily: T.fontDisplay, fontSize: T.displaySize, color: T.fg, fontWeight: T.displayWeight, letterSpacing: T.displayTracking, lineHeight: 1.15 }}>{d.name}</div>
+          <div style={{ fontFamily: T.fontMono, fontSize: 10, color: T.muted, letterSpacing: '0.06em', marginTop: 4, textTransform: 'uppercase' }}>{d.serving} · {d.mg} mg · {d.kcal} kcal / serving</div>
+        </div>
+        <button onClick={onClose} style={{ background: T.track, border: 'none', color: T.fg, width: 30, height: 30, borderRadius: T.radius, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg>
+        </button>
+      </div>
+      <div style={{ padding: '18px 22px 6px', fontFamily: T.fontMono, fontSize: 10, letterSpacing: '0.16em', textTransform: 'uppercase', color: T.muted }}>How much?</div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 6, padding: '8px 22px 0' }}>
+        {PORTIONS.map(p => {
+          const sel = Math.abs(p.value - amount) < 0.001;
+          return (
+            <button key={p.value} onClick={() => setAmount(p.value)} style={{ padding: '16px 8px', borderRadius: T.radius, border: sel ? `1px solid ${T.accent}` : T.cardBorder, background: sel ? 'rgba(163,122,79,0.10)' : 'transparent', color: sel ? T.accent : T.fg, fontFamily: T.fontDisplay, fontSize: 22, fontWeight: T.displayWeight, letterSpacing: T.displayTracking, cursor: 'pointer', transition: 'all 0.15s' }}>
+              {p.label}
+            </button>
+          );
+        })}
+      </div>
+      <div style={{ padding: '18px 22px 4px', display: 'flex', alignItems: 'center', gap: 10 }}>
+        <input type="range" min="0.1" max="3" step="0.05" value={amount} onChange={e => setAmount(Number(e.target.value))} style={{ flex: 1 }} />
+        <span style={{ fontFamily: T.fontMono, fontSize: 11, color: T.muted, letterSpacing: '0.04em', minWidth: 44, textAlign: 'right' }}>×{amount.toFixed(2).replace(/\.?0+$/, '')}</span>
+      </div>
+      <div style={{ padding: '14px 22px 0', display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', borderTop: T.divider, marginTop: 4, paddingTop: 14 }}>
+        <div style={{ fontFamily: T.fontMono, fontSize: 10, letterSpacing: '0.16em', textTransform: 'uppercase', color: T.muted }}>Logging</div>
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
+          <span style={{ fontFamily: T.fontDisplay, fontSize: 26, color: T.fg, fontWeight: T.displayWeight, letterSpacing: T.displayTracking, fontFeatureSettings: '"tnum"' }}>{mg}</span>
+          <span style={{ fontFamily: T.fontMono, fontSize: 11, color: T.muted }}>mg</span>
+          <span style={{ fontFamily: T.fontMono, fontSize: 11, color: T.muted, marginLeft: 6 }}>· {kcal} kcal</span>
+        </div>
+      </div>
+      <div style={{ padding: '16px 22px 0' }}>
+        <button onClick={() => { onConfirm(d.id, amount); onClose(); }} style={{ width: '100%', padding: '14px', borderRadius: T.radius, border: 'none', background: T.accent, color: T.bg, fontFamily: T.fontMono, fontSize: 11, fontWeight: 600, letterSpacing: '0.18em', textTransform: 'uppercase', cursor: 'pointer' }}>
+          Add to log
+        </button>
+      </div>
+    </>
+  );
+}
+
+// ── Amount — mobile bottom sheet ──────────────────────────────────────────
 function AmountSheet({ open, drinkId, onClose, onConfirm }) {
   const [amount, setAmount] = useState(1);
   useEffect(() => { if (open) setAmount(1); }, [open, drinkId]);
   const d = drinkId ? DRINK_BY_ID[drinkId] : null;
-  const mg = d ? Math.round(d.mg * amount) : 0;
-  const kcal = d ? Math.round(d.kcal * amount) : 0;
   return (
     <div style={{ position: 'fixed', inset: 0, pointerEvents: open ? 'auto' : 'none', zIndex: 60 }}>
       <div onClick={onClose} style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.55)', opacity: open ? 1 : 0, transition: 'opacity 0.25s' }} />
@@ -315,87 +472,43 @@ function AmountSheet({ open, drinkId, onClose, onConfirm }) {
         <div style={{ display: 'flex', justifyContent: 'center', paddingTop: 8 }}>
           <div style={{ width: 36, height: 3, background: T.muted, opacity: 0.4 }} />
         </div>
-        {d && (
-          <>
-            <div style={{ padding: '14px 22px 4px', display: 'flex', alignItems: 'center', gap: 14 }}>
-              <div style={{ width: 44, height: 44, borderRadius: T.radius, border: T.cardBorder, display: 'flex', alignItems: 'center', justifyContent: 'center', color: T.accent, flexShrink: 0 }}><DrinkGlyph cat={d.cat} size={22} /></div>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontFamily: T.fontDisplay, fontSize: T.displaySize, color: T.fg, fontWeight: T.displayWeight, letterSpacing: T.displayTracking, lineHeight: 1.15 }}>{d.name}</div>
-                <div style={{ fontFamily: T.fontMono, fontSize: 10, color: T.muted, letterSpacing: '0.06em', marginTop: 4, textTransform: 'uppercase' }}>{d.serving} · {d.mg} mg · {d.kcal} kcal / serving</div>
-              </div>
-              <button onClick={onClose} style={{ background: T.track, border: 'none', color: T.fg, width: 30, height: 30, borderRadius: T.radius, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg>
-              </button>
-            </div>
-            <div style={{ padding: '18px 22px 6px', fontFamily: T.fontMono, fontSize: 10, letterSpacing: '0.16em', textTransform: 'uppercase', color: T.muted }}>How much?</div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 6, padding: '8px 22px 0' }}>
-              {PORTIONS.map(p => {
-                const sel = Math.abs(p.value - amount) < 0.001;
-                return (
-                  <button key={p.value} onClick={() => setAmount(p.value)} style={{ padding: '16px 8px', borderRadius: T.radius, border: sel ? `1px solid ${T.accent}` : T.cardBorder, background: sel ? 'rgba(163,122,79,0.10)' : 'transparent', color: sel ? T.accent : T.fg, fontFamily: T.fontDisplay, fontSize: 22, fontWeight: T.displayWeight, letterSpacing: T.displayTracking, cursor: 'pointer', transition: 'all 0.15s' }}>
-                    {p.label}
-                  </button>
-                );
-              })}
-            </div>
-            <div style={{ padding: '18px 22px 4px', display: 'flex', alignItems: 'center', gap: 10 }}>
-              <input type="range" min="0.1" max="3" step="0.05" value={amount} onChange={e => setAmount(Number(e.target.value))} style={{ flex: 1 }} />
-              <span style={{ fontFamily: T.fontMono, fontSize: 11, color: T.muted, letterSpacing: '0.04em', minWidth: 44, textAlign: 'right' }}>×{amount.toFixed(2).replace(/\.?0+$/, '')}</span>
-            </div>
-            <div style={{ padding: '14px 22px 0', display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', borderTop: T.divider, marginTop: 4, paddingTop: 14 }}>
-              <div style={{ fontFamily: T.fontMono, fontSize: 10, letterSpacing: '0.16em', textTransform: 'uppercase', color: T.muted }}>Logging</div>
-              <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
-                <span style={{ fontFamily: T.fontDisplay, fontSize: 26, color: T.fg, fontWeight: T.displayWeight, letterSpacing: T.displayTracking, fontFeatureSettings: '"tnum"' }}>{mg}</span>
-                <span style={{ fontFamily: T.fontMono, fontSize: 11, color: T.muted }}>mg</span>
-                <span style={{ fontFamily: T.fontMono, fontSize: 11, color: T.muted, marginLeft: 6 }}>· {kcal} kcal</span>
-              </div>
-            </div>
-            <div style={{ padding: '16px 22px 0' }}>
-              <button onClick={() => { onConfirm(d.id, amount); onClose(); }} style={{ width: '100%', padding: '14px', borderRadius: T.radius, border: 'none', background: T.accent, color: T.bg, fontFamily: T.fontMono, fontSize: 11, fontWeight: 600, letterSpacing: '0.18em', textTransform: 'uppercase', cursor: 'pointer' }}>
-                Add to log
-              </button>
-            </div>
-          </>
-        )}
+        {d && <AmountBody d={d} amount={amount} setAmount={setAmount} onClose={onClose} onConfirm={onConfirm} />}
       </div>
     </div>
   );
 }
 
-// ── Card ───────────────────────────────────────────────────────────────────
-function Card({ children, style = {}, padding = 16 }) {
-  return <div style={{ background: T.card, border: T.cardBorder, borderRadius: T.radius, padding, ...style }}>{children}</div>;
+// ── Amount — desktop centered modal ───────────────────────────────────────
+function AmountModal({ open, drinkId, onClose, onConfirm }) {
+  const [amount, setAmount] = useState(1);
+  useEffect(() => { if (open) setAmount(1); }, [open, drinkId]);
+  const d = drinkId ? DRINK_BY_ID[drinkId] : null;
+  if (!open || !d) return null;
+  return (
+    <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 60 }}>
+      <div onClick={e => e.stopPropagation()} style={{ width: 460, maxWidth: 'calc(100vw - 64px)', background: T.sheetBg, border: T.cardBorder, borderRadius: T.radius, boxShadow: '0 30px 80px rgba(0,0,0,0.5)', paddingTop: 6, paddingBottom: 22 }}>
+        <AmountBody d={d} amount={amount} setAmount={setAmount} onClose={onClose} onConfirm={onConfirm} />
+      </div>
+    </div>
+  );
 }
 
-// ── App ────────────────────────────────────────────────────────────────────
-function App() {
-  const [entries, setEntries] = useState(loadEntries);
-  const [browseOpen, setBrowseOpen] = useState(false);
-  const [pendingDrink, setPendingDrink] = useState(null);
-  const now = useLiveNow();
-  const [width, setWidth] = useState(Math.min(window.innerWidth, 480));
+function AmountPicker({ open, drinkId, onClose, onConfirm, isDesktop }) {
+  return isDesktop
+    ? <AmountModal open={open} drinkId={drinkId} onClose={onClose} onConfirm={onConfirm} />
+    : <AmountSheet open={open} drinkId={drinkId} onClose={onClose} onConfirm={onConfirm} />;
+}
 
+// ══════════════════════════════════════════════════════════════════════════
+// MOBILE LAYOUT
+// ══════════════════════════════════════════════════════════════════════════
+function MobileApp({ entries, addEntry, removeEntry, updateEntryTime, now, setBrowseOpen, setPendingDrink }) {
+  const [width, setWidth] = useState(Math.min(window.innerWidth, 480));
   useEffect(() => {
     const onResize = () => setWidth(Math.min(window.innerWidth, 480));
     window.addEventListener('resize', onResize);
     return () => window.removeEventListener('resize', onResize);
   }, []);
-
-  const addEntry = (drinkId, amount = 1) => {
-    const d = DRINK_BY_ID[drinkId];
-    const next = [...entries, { id: 'e' + Date.now(), drink: drinkId, amount, mg: Math.round(d.mg * amount), kcal: Math.round(d.kcal * amount), time: Date.now() }];
-    setEntries(next); saveEntries(next);
-  };
-  const removeEntry = id => {
-    const next = entries.filter(e => e.id !== id);
-    setEntries(next); saveEntries(next);
-  };
-  const updateEntryTime = (id, timeStr) => {
-    const [h, m] = timeStr.split(':').map(Number);
-    const d = new Date(); d.setHours(h, m, 0, 0);
-    const next = entries.map(e => e.id === id ? { ...e, time: d.getTime() } : e);
-    setEntries(next); saveEntries(next);
-  };
 
   const total = entries.reduce((s, e) => s + e.mg, 0);
   const kcal = entries.reduce((s, e) => s + e.kcal, 0);
@@ -414,21 +527,17 @@ function App() {
 
   const QUICK = ['drip', 'dbl-espresso', 'latte', 'matcha', 'monster-zero', 'red-bull'];
 
-  const curveWidth = width - 36 - 32; // page padding + card padding
-
+  const curveWidth = width - 36 - 32;
   const headlineColor = total > 400 ? T.danger : T.fg;
   const overColor = total < 300 ? T.ok : total < 400 ? T.warn : T.danger;
 
   return (
-    <div style={{ maxWidth: 480, margin: '0 auto', padding: '24px 18px 60px', display: 'flex', flexDirection: 'column', gap: 16 }}>
-
-      {/* Greeting */}
+    <div className="kaffe-mobile" style={{ maxWidth: 480, margin: '0 auto', padding: '24px 18px 60px', display: 'flex', flexDirection: 'column', gap: 16 }}>
       <div style={{ paddingTop: 6 }}>
         <div style={{ fontFamily: T.fontMono, fontSize: 10, letterSpacing: '0.18em', textTransform: 'uppercase', color: T.muted, marginBottom: 4 }}>{greeting.toUpperCase()}</div>
         <div style={{ fontFamily: T.fontDisplay, fontSize: 30, lineHeight: 1.05, color: T.fg, fontWeight: T.displayWeight, letterSpacing: T.displayTracking }}>Today</div>
       </div>
 
-      {/* Hero — intake + active + curve + coach line */}
       <Card padding={16}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14 }}>
           <div>
@@ -451,7 +560,6 @@ function App() {
         </div>
       </Card>
 
-      {/* Mini stats row */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
         <Card padding={12}>
           <div style={{ fontFamily: T.fontMono, fontSize: 9, letterSpacing: '0.12em', textTransform: 'uppercase', color: T.muted, marginBottom: 4 }}>Calories</div>
@@ -470,7 +578,6 @@ function App() {
         </Card>
       </div>
 
-      {/* Quick log */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0 4px' }}>
           <div style={{ fontFamily: T.fontMono, fontSize: 10, letterSpacing: '0.14em', textTransform: 'uppercase', color: T.muted, fontWeight: 500 }}>Quick log</div>
@@ -496,7 +603,6 @@ function App() {
         </div>
       </div>
 
-      {/* Today's log */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
         <div style={{ padding: '0 4px', fontFamily: T.fontMono, fontSize: 10, letterSpacing: '0.14em', textTransform: 'uppercase', color: T.muted, fontWeight: 500 }}>Today's log</div>
         {entries.length === 0 ? (
@@ -538,10 +644,525 @@ function App() {
           </Card>
         )}
       </div>
-
-      <BrowseSheet open={browseOpen} onClose={() => setBrowseOpen(false)} onPick={setPendingDrink} />
-      <AmountSheet open={pendingDrink !== null} drinkId={pendingDrink} onClose={() => setPendingDrink(null)} onConfirm={addEntry} />
     </div>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// DESKTOP LAYOUT
+// ══════════════════════════════════════════════════════════════════════════
+function KaffeWordmark({ size = 18 }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+      <svg width={size + 4} height={size + 4} viewBox="0 0 24 24" fill="none" stroke={T.accent} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M4 9h13v6a4 4 0 0 1-4 4H8a4 4 0 0 1-4-4V9z" />
+        <path d="M17 11h2a2 2 0 0 1 0 4h-2" />
+        <path d="M7 4c0 1.5 1 1.5 1 3M11 4c0 1.5 1 1.5 1 3" />
+      </svg>
+      <span style={{ fontFamily: T.fontMono, fontSize: size, color: T.fg, fontWeight: 600, letterSpacing: '-0.01em' }}>kaffe</span>
+    </div>
+  );
+}
+
+function TopNav({ tab, onTab, now }) {
+  const tabs = [
+    { id: 'today', label: 'Today' },
+    { id: 'history', label: 'History' },
+    { id: 'sleep', label: 'Sleep' },
+  ];
+  const dateStr = new Date(now).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+  return (
+    <div style={{ height: 64, padding: '0 32px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: T.divider, background: T.bg, position: 'sticky', top: 0, zIndex: 10 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 56 }}>
+        <KaffeWordmark />
+        <div style={{ display: 'flex', gap: 4 }}>
+          {tabs.map(t => (
+            <button key={t.id} onClick={() => onTab(t.id)} style={{ padding: '8px 16px', border: 'none', cursor: 'pointer', background: 'transparent', color: tab === t.id ? T.fg : T.muted, fontFamily: T.fontMono, fontSize: 12, letterSpacing: '0.12em', textTransform: 'uppercase', fontWeight: tab === t.id ? 600 : 400, borderBottom: tab === t.id ? `1px solid ${T.accent}` : '1px solid transparent', borderRadius: 0, transition: 'color 0.15s' }}>{t.label}</button>
+          ))}
+        </div>
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 18 }}>
+        <span style={{ fontFamily: T.fontMono, fontSize: 12, color: T.muted, letterSpacing: '0.04em' }}>{dateStr}</span>
+      </div>
+    </div>
+  );
+}
+
+function DLabel({ children, style = {} }) {
+  return <div style={{ fontFamily: T.fontMono, fontSize: 10, letterSpacing: '0.16em', textTransform: 'uppercase', color: T.muted, fontWeight: 500, ...style }}>{children}</div>;
+}
+
+function StatBlock({ label, value, unit, big = false, live = false, over = false, numeric = true }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <DLabel>{label}</DLabel>
+        {live && <span style={{ width: 5, height: 5, borderRadius: 3, background: T.accent, animation: 'kaffePulse 2s ease-out infinite', color: T.accent }} />}
+      </div>
+      <div style={{ fontFamily: T.fontDisplay, fontSize: big ? 56 : 38, lineHeight: 1, color: over ? T.danger : T.fg, fontWeight: T.displayWeight, letterSpacing: T.displayTracking, fontFeatureSettings: numeric ? '"tnum"' : 'normal' }}>{value}</div>
+      <div style={{ fontFamily: T.fontMono, fontSize: 11, color: T.muted, letterSpacing: '0.04em' }}>{unit}</div>
+    </div>
+  );
+}
+
+function HeroGraph({ entries, now }) {
+  const [ref, w] = useElementWidth();
+  const total = entries.reduce((s, e) => s + e.mg, 0);
+  const active = Math.round(activeAt(entries, now));
+  const safeAt = timeBelow(entries, 50, now);
+  const pctOfLimit = Math.round((total / 400) * 100);
+  return (
+    <div style={{ background: T.card, border: T.cardBorder, borderRadius: T.radius, padding: 28 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr 1fr 1fr', gap: 28, marginBottom: 24 }}>
+        <StatBlock label="Today's intake" value={total} unit={`of 400 mg · ${pctOfLimit}%`} big over={total > 400} />
+        <StatBlock label="Active in body" value={active} unit="mg right now" live />
+        <StatBlock label="Sleep-safe at" value={safeAt ? fmtTime(safeAt) : '—'} unit="under 50 mg" numeric={false} />
+        <StatBlock label="Half-life" value="~5h" unit="metabolic rate" numeric={false} />
+      </div>
+      <div ref={ref}>
+        {w > 0 && <DecayCurve entries={entries} now={now} width={w} height={300} />}
+      </div>
+    </div>
+  );
+}
+
+function CoachBanner({ entries }) {
+  const total = entries.reduce((s, e) => s + e.mg, 0);
+  let line, label;
+  if (total === 0) { label = 'Fresh day'; line = "Tap a drink to log when you're ready."; }
+  else if (total < 200) { label = 'Cruising'; line = "Plenty of room left. Your next coffee won't push you near the limit."; }
+  else if (total < 350) { label = 'Steady'; line = "Solid pace — consider tea or decaf for the next one."; }
+  else if (total < 500) { label = 'At the limit'; line = "You're at your daily cap of 400 mg. Body is fully fueled."; }
+  else { label = 'Over the line'; line = "Big day. Water from here to be kind to your sleep tonight."; }
+  return (
+    <div style={{ padding: '14px 22px', border: T.coachBorder, borderRadius: T.radius, display: 'flex', alignItems: 'center', gap: 18 }}>
+      <DLabel style={{ color: T.accent }}>Coach · {label}</DLabel>
+      <span style={{ fontFamily: T.fontBody, fontSize: 13.5, color: T.fg, lineHeight: 1.5 }}>{line}</span>
+    </div>
+  );
+}
+
+function QuickLogDesktop({ onPick, onBrowse, columns = 2 }) {
+  const QUICK = ['drip', 'dbl-espresso', 'latte', 'matcha', 'cold-brew', 'monster-zero'];
+  return (
+    <div style={{ background: T.card, border: T.cardBorder, borderRadius: T.radius, padding: 20 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+        <DLabel>Quick log</DLabel>
+        <button onClick={onBrowse} style={{ background: 'none', border: 'none', cursor: 'pointer', fontFamily: T.fontMono, fontSize: 11, letterSpacing: '0.12em', textTransform: 'uppercase', color: T.accent, padding: 0 }}>Browse catalog →</button>
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: `repeat(${columns}, 1fr)`, gap: 10 }}>
+        {QUICK.map(id => {
+          const d = DRINK_BY_ID[id];
+          return (
+            <button key={id} onClick={() => onPick(id)}
+              style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 10, padding: '14px', background: 'transparent', border: T.cardBorder, borderRadius: T.radius, cursor: 'pointer', color: T.fg, textAlign: 'left', transition: 'background 0.15s, border-color 0.15s' }}
+              onMouseEnter={e => e.currentTarget.style.background = T.track}
+              onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+              <div style={{ color: T.accent }}><DrinkGlyph cat={d.cat} size={22} /></div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4, width: '100%' }}>
+                <div style={{ fontFamily: T.fontBody, fontSize: 13, color: T.fg, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{d.name}</div>
+                <div style={{ fontFamily: T.fontMono, fontSize: 10, color: T.muted, letterSpacing: '0.04em' }}>{d.mg} mg · {d.kcal} kcal</div>
+              </div>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function TodayLogDesktop({ entries, removeEntry, updateEntryTime }) {
+  return (
+    <div style={{ background: T.card, border: T.cardBorder, borderRadius: T.radius, padding: 0 }}>
+      <div style={{ padding: '20px 22px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: T.divider }}>
+        <DLabel>Today's log</DLabel>
+        <span style={{ fontFamily: T.fontMono, fontSize: 11, color: T.muted }}>{entries.length} drink{entries.length === 1 ? '' : 's'}</span>
+      </div>
+      {entries.length === 0 ? (
+        <div style={{ padding: 32, textAlign: 'center', fontFamily: T.fontBody, fontSize: 13, color: T.muted }}>Nothing logged yet.</div>
+      ) : entries.slice().sort((a, b) => b.time - a.time).map((e, i, arr) => {
+        const d = DRINK_BY_ID[e.drink];
+        const t = new Date(e.time);
+        const timeVal = `${t.getHours().toString().padStart(2,'0')}:${t.getMinutes().toString().padStart(2,'0')}`;
+        return (
+          <div key={e.id} style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '14px 22px', borderBottom: i < arr.length - 1 ? T.divider : 'none' }}>
+            <div style={{ color: T.accent, flexShrink: 0 }}><DrinkGlyph cat={d.cat} size={22} /></div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontFamily: T.fontBody, fontSize: 13.5, color: T.fg, fontWeight: 500, marginBottom: 4, display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span>{d.name}</span>
+                {e.amount && Math.abs(e.amount - 1) > 0.001 && (
+                  <span style={{ fontFamily: T.fontMono, fontSize: 10, color: T.accent, border: `1px solid ${T.accent}55`, padding: '0 5px', borderRadius: T.radius, letterSpacing: '0.04em' }}>{portionLabel(e.amount)}×</span>
+                )}
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <input type="time" value={timeVal} onChange={ev => updateEntryTime(e.id, ev.target.value)}
+                  style={{ fontFamily: T.fontMono, fontSize: 11, color: T.accent, background: T.track, border: 'none', borderRadius: T.radius, padding: '2px 8px', cursor: 'pointer', letterSpacing: '0.04em', outline: 'none', width: 84 }} />
+                <span style={{ fontFamily: T.fontMono, fontSize: 11, color: T.muted, letterSpacing: '0.04em' }}>{e.mg} mg · {e.kcal} kcal</span>
+              </div>
+            </div>
+            <button onClick={() => removeEntry(e.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: T.muted, padding: 4 }}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg>
+            </button>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function StatsStrip({ entries }) {
+  const kcal = entries.reduce((s, e) => s + e.kcal, 0);
+  const total = entries.reduce((s, e) => s + e.mg, 0);
+  const avgPerDrink = entries.length ? Math.round(total / entries.length) : 0;
+  const stats = [
+    { label: 'Drinks',      value: entries.length, unit: null },
+    { label: 'Calories',    value: kcal, unit: 'kcal' },
+    { label: 'Avg / drink', value: avgPerDrink, unit: 'mg' },
+    { label: 'Daily limit', value: 400, unit: 'mg' },
+  ];
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16 }}>
+      {stats.map((s, i) => (
+        <div key={i} style={{ background: T.card, border: T.cardBorder, borderRadius: T.radius, padding: 20 }}>
+          <DLabel>{s.label}</DLabel>
+          <div style={{ fontFamily: T.fontDisplay, fontSize: 32, color: T.fg, fontWeight: T.displayWeight, marginTop: 8, lineHeight: 1 }}>
+            {s.value}{s.unit && <span style={{ fontFamily: T.fontMono, fontSize: 12, color: T.muted, marginLeft: 6 }}>{s.unit}</span>}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function ThisWeekCard({ entries }) {
+  const data = useMemo(() => {
+    const w = makeWeekHistory();
+    const todayTotal = entries.reduce((s, e) => s + e.mg, 0);
+    w[w.length - 1] = { ...w[w.length - 1], mg: todayTotal };
+    return w;
+  }, [entries]);
+  const avg = Math.round(data.reduce((s, d) => s + d.mg, 0) / data.length);
+  const max = Math.max(400, ...data.map(d => d.mg)) * 1.1;
+  const W = 260, H = 96;
+  const barW = (W - 4) / data.length - 6;
+  return (
+    <div style={{ background: T.card, border: T.cardBorder, borderRadius: T.radius, padding: 20 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 14 }}>
+        <DLabel>This week</DLabel>
+        <span style={{ fontFamily: T.fontMono, fontSize: 11, color: T.muted, letterSpacing: '0.04em' }}>avg {avg} mg/day</span>
+      </div>
+      <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} style={{ display: 'block', width: '100%' }}>
+        {(() => {
+          const y = (1 - 400 / max) * (H - 18);
+          return <line x1="0" x2={W} y1={y} y2={y} stroke={T.danger} strokeOpacity="0.4" strokeDasharray="2 4" strokeWidth="1" />;
+        })()}
+        {data.map((d, i) => {
+          const v = d.mg;
+          const h = (v / max) * (H - 18);
+          const x = 2 + i * ((W - 4) / data.length) + 3;
+          const y = H - 18 - h;
+          const isLast = i === data.length - 1;
+          const fill = v > 400 ? T.danger : (isLast ? T.accent : T.bar);
+          return (
+            <g key={i}>
+              <rect x={x} y={y} width={barW} height={h} rx={1} fill={fill} opacity={isLast ? 1 : 0.85} />
+              <text x={x + barW/2} y={H - 4} textAnchor="middle" fill={isLast ? T.fg : T.muted} fontSize="9" fontFamily={T.fontMono} letterSpacing="0.06em">{d.day.toUpperCase()}</text>
+            </g>
+          );
+        })}
+      </svg>
+    </div>
+  );
+}
+
+function SleepCard({ entries, now }) {
+  const bedtime = useMemo(() => {
+    const d = new Date(now);
+    d.setHours(23, 0, 0, 0);
+    if (d.getTime() < now) d.setDate(d.getDate() + 1);
+    return d.getTime();
+  }, [now]);
+  const atBed = Math.round(activeAt(entries, bedtime));
+  let verdict, color;
+  if (atBed < 30)        { verdict = "You'll sleep fine.";   color = T.ok; }
+  else if (atBed < 80)   { verdict = 'Light sleep risk.';    color = T.warn; }
+  else if (atBed < 150)  { verdict = 'Rough sleep ahead.';   color = T.warn; }
+  else                   { verdict = 'Wired.';               color = T.danger; }
+  return (
+    <div style={{ background: T.card, border: T.cardBorder, borderRadius: T.radius, padding: 20 }}>
+      <DLabel style={{ marginBottom: 10 }}>Tonight · 11:00 pm</DLabel>
+      <div style={{ fontFamily: T.fontDisplay, fontSize: 44, lineHeight: 1, color, fontWeight: T.displayWeight, letterSpacing: T.displayTracking, marginBottom: 6 }}>
+        {atBed}<span style={{ fontFamily: T.fontMono, fontSize: 14, color: T.muted, marginLeft: 6, letterSpacing: '0.04em' }}>mg</span>
+      </div>
+      <div style={{ fontFamily: T.fontDisplay, fontSize: 18, color: T.fg, marginBottom: 8, fontWeight: T.displayWeight }}>{verdict}</div>
+      <div style={{ fontFamily: T.fontBody, fontSize: 12.5, color: T.muted, lineHeight: 1.5 }}>
+        {atBed < 30
+          ? "Caffeine should be cleared by bedtime."
+          : atBed < 80
+            ? "Some caffeine lingering — deep sleep may be reduced."
+            : atBed < 150
+              ? "Significant caffeine at bedtime. Try a 6h cutoff next time."
+              : "Sleep will be fragmented. Cut caffeine 6h before bed."}
+      </div>
+    </div>
+  );
+}
+
+function HistoryView({ entries }) {
+  const [range, setRange] = useState('week');
+  const week = useMemo(() => {
+    const w = makeWeekHistory();
+    const todayTotal = entries.reduce((s, e) => s + e.mg, 0);
+    w[w.length - 1] = { ...w[w.length - 1], mg: todayTotal };
+    return w;
+  }, [entries]);
+  const month = useMemo(() => makeMonthHistory(), []);
+  const data = range === 'week' ? week : month;
+  const labels = data.map(d => d.day || d.week);
+  const values = data.map(d => d.mg);
+  const avg = Math.round(values.reduce((s, v) => s + v, 0) / values.length);
+  const max = Math.max(400, ...values) * 1.1;
+  const last = values[values.length - 1];
+  const prev = values[values.length - 2];
+  const delta = last - prev;
+
+  const TOP = [
+    { id: 'drip', count: 8, mg: 760 },
+    { id: 'cold-brew', count: 4, mg: 800 },
+    { id: 'cappuccino', count: 5, mg: 375 },
+    { id: 'matcha', count: 3, mg: 210 },
+  ];
+
+  const [chartRef, chartW] = useElementWidth([range]);
+  const W = chartW || 820, H = 320;
+  const padBot = 30, padTop = 10;
+  const n = data.length;
+  const barW = (W - 4) / n - 12;
+
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1.7fr) minmax(0,1fr)', gap: 24, alignItems: 'start' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+        <div style={{ background: T.card, border: T.cardBorder, borderRadius: T.radius, padding: 28 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 22 }}>
+            <div>
+              <DLabel>{range === 'week' ? '7-day average' : '4-week average'}</DLabel>
+              <div style={{ fontFamily: T.fontDisplay, fontSize: 48, color: T.fg, fontWeight: T.displayWeight, marginTop: 6, lineHeight: 1 }}>
+                {avg}<span style={{ fontFamily: T.fontMono, fontSize: 13, color: T.muted, marginLeft: 6 }}>mg/day</span>
+              </div>
+              <div style={{ fontFamily: T.fontMono, fontSize: 12, marginTop: 8, color: delta >= 0 ? T.warn : T.ok, letterSpacing: '0.04em' }}>{delta >= 0 ? '+' : ''}{delta} mg vs prior</div>
+            </div>
+            <div style={{ display: 'inline-flex', background: T.track, padding: 3, borderRadius: T.radius }}>
+              {['week', 'month'].map(r => (
+                <button key={r} onClick={() => setRange(r)} style={{ padding: '8px 16px', border: 'none', cursor: 'pointer', background: range === r ? T.bg : 'transparent', color: range === r ? T.fg : T.muted, fontFamily: T.fontMono, fontSize: 11, letterSpacing: '0.12em', textTransform: 'uppercase', borderRadius: T.radius }}>{r === 'week' ? 'This week' : 'This month'}</button>
+              ))}
+            </div>
+          </div>
+          <div ref={chartRef}>
+            {chartW > 0 && (
+              <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} style={{ display: 'block', width: '100%' }}>
+                {(() => {
+                  const y = padTop + (1 - 400 / max) * (H - padTop - padBot);
+                  return (
+                    <g>
+                      <line x1="0" x2={W} y1={y} y2={y} stroke={T.danger} strokeOpacity="0.4" strokeDasharray="2 4" strokeWidth="1" />
+                      <text x={W} y={y - 6} textAnchor="end" fill={T.danger} fillOpacity="0.7" fontSize="11" fontFamily={T.fontMono} letterSpacing="0.06em">400 MG · DAILY MAX</text>
+                    </g>
+                  );
+                })()}
+                {data.map((d, i) => {
+                  const v = d.mg;
+                  const h = (v / max) * (H - padTop - padBot);
+                  const x = 2 + i * ((W - 4) / n) + 6;
+                  const y = H - padBot - h;
+                  const isLast = i === data.length - 1;
+                  const fill = v > 400 ? T.danger : (isLast ? T.accent : T.bar);
+                  return (
+                    <g key={i}>
+                      <rect x={x} y={y} width={barW} height={h} rx={1} fill={fill} opacity={isLast ? 1 : 0.85} />
+                      <text x={x + barW/2} y={H - 12} textAnchor="middle" fill={isLast ? T.fg : T.muted} fontSize="11" fontFamily={T.fontMono} letterSpacing="0.08em">{labels[i].toUpperCase()}</text>
+                      <text x={x + barW/2} y={y - 8} textAnchor="middle" fill={T.muted} fontSize="10" fontFamily={T.fontMono} letterSpacing="0.04em" opacity={h > 22 ? 1 : 0}>{v}</text>
+                    </g>
+                  );
+                })}
+              </svg>
+            )}
+          </div>
+        </div>
+        <CoachBanner entries={entries} />
+      </div>
+      <div style={{ background: T.card, border: T.cardBorder, borderRadius: T.radius, padding: 0 }}>
+        <div style={{ padding: '20px 22px 12px', borderBottom: T.divider }}>
+          <DLabel>Most logged · 7 days</DLabel>
+        </div>
+        {TOP.map((t, i) => {
+          const d = DRINK_BY_ID[t.id];
+          return (
+            <div key={t.id} style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '14px 22px', borderBottom: i < TOP.length - 1 ? T.divider : 'none' }}>
+              <div style={{ color: T.accent, flexShrink: 0 }}><DrinkGlyph cat={d.cat} size={22} /></div>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontFamily: T.fontBody, fontSize: 13.5, color: T.fg, fontWeight: 500, marginBottom: 3 }}>{d.name}</div>
+                <div style={{ fontFamily: T.fontMono, fontSize: 11, color: T.muted, letterSpacing: '0.04em' }}>{t.count} drinks · {t.mg} mg total</div>
+              </div>
+              <div style={{ fontFamily: T.fontDisplay, fontSize: 18, color: T.fg, fontWeight: T.displayWeight }}>#{i+1}</div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function SleepView({ entries, now }) {
+  const [bedHour, setBedHour] = useState(23);
+  const bedtime = useMemo(() => {
+    const d = new Date(now);
+    d.setHours(bedHour, 0, 0, 0);
+    if (d.getTime() < now) d.setDate(d.getDate() + 1);
+    return d.getTime();
+  }, [now, bedHour]);
+  const atBed = Math.round(activeAt(entries, bedtime));
+  const safeAt = timeBelow(entries, 50, now);
+
+  let verdict, color, msg;
+  if (atBed < 30) {
+    verdict = "You'll sleep fine."; color = T.ok;
+    msg = "Caffeine is mostly cleared by bedtime.";
+  } else if (atBed < 80) {
+    verdict = "Light sleep risk."; color = T.warn;
+    msg = "Some caffeine lingering. Deep sleep may be reduced.";
+  } else if (atBed < 150) {
+    verdict = "Expect rough sleep."; color = T.warn;
+    msg = "Significant caffeine at bedtime. Try wrapping earlier tomorrow.";
+  } else {
+    verdict = "Wired."; color = T.danger;
+    msg = "Sleep will be fragmented. Cut caffeine 6+ hours before bed.";
+  }
+  function formatHour(h) {
+    let hh = h % 24;
+    if (hh === 0 || hh === 24) return '12:00 am';
+    if (hh === 12) return '12:00 pm';
+    const ap = hh >= 12 ? 'pm' : 'am';
+    if (hh > 12) hh = hh - 12;
+    return `${hh}:00 ${ap}`;
+  }
+  const [curveRef, curveW] = useElementWidth();
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1.7fr) minmax(0,1fr)', gap: 24, alignItems: 'start' }}>
+      <div style={{ background: T.card, border: T.cardBorder, borderRadius: T.radius, padding: 28 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 28, marginBottom: 22, flexWrap: 'wrap' }}>
+          <div style={{ minWidth: 0 }}>
+            <DLabel>Caffeine in body at {formatHour(bedHour)}</DLabel>
+            <div style={{ fontFamily: T.fontDisplay, fontSize: 56, color, fontWeight: T.displayWeight, marginTop: 6, lineHeight: 1, fontFeatureSettings: '"tnum"' }}>
+              {atBed}<span style={{ fontFamily: T.fontMono, fontSize: 14, color: T.muted, marginLeft: 6, letterSpacing: '0.04em' }}>mg</span>
+            </div>
+            <div style={{ fontFamily: T.fontDisplay, fontSize: 22, color: T.fg, marginTop: 10, fontWeight: T.displayWeight }}>{verdict}</div>
+            <div style={{ fontFamily: T.fontBody, fontSize: 13.5, color: T.muted, marginTop: 6, lineHeight: 1.5, maxWidth: 460 }}>{msg}</div>
+          </div>
+          <div style={{ width: 280 }}>
+            <DLabel style={{ marginBottom: 10 }}>Bedtime · {formatHour(bedHour)}</DLabel>
+            <input type="range" min="20" max="27" step="1" value={bedHour} onChange={e => setBedHour(+e.target.value)} style={{ width: '100%', accentColor: T.accent }} />
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontFamily: T.fontMono, fontSize: 10, color: T.muted, marginTop: 4 }}>
+              <span>8p</span><span>10p</span><span>12a</span><span>3a</span>
+            </div>
+          </div>
+        </div>
+        <div ref={curveRef}>
+          {curveW > 0 && <DecayCurve entries={entries} now={now} width={curveW} height={200} />}
+        </div>
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+        <div style={{ background: T.card, border: T.cardBorder, borderRadius: T.radius, padding: 20 }}>
+          <DLabel>Sleep-safe at</DLabel>
+          <div style={{ fontFamily: T.fontDisplay, fontSize: 36, color: T.fg, fontWeight: T.displayWeight, marginTop: 8, lineHeight: 1 }}>{safeAt ? fmtTime(safeAt) : '—'}</div>
+          <div style={{ fontFamily: T.fontBody, fontSize: 12, color: T.muted, marginTop: 8, lineHeight: 1.5 }}>When your active dose drops below 50 mg.</div>
+        </div>
+        <div style={{ background: T.card, border: T.cardBorder, borderRadius: T.radius, padding: 20 }}>
+          <DLabel>Half-life</DLabel>
+          <div style={{ fontFamily: T.fontDisplay, fontSize: 36, color: T.fg, fontWeight: T.displayWeight, marginTop: 8, lineHeight: 1 }}>~5h</div>
+          <div style={{ fontFamily: T.fontBody, fontSize: 12, color: T.muted, marginTop: 8, lineHeight: 1.5 }}>Half of what you drink now is still in you 5 hours later.</div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function DesktopApp({ entries, addEntry, removeEntry, updateEntryTime, now, setBrowseOpen, setPendingDrink }) {
+  const [tab, setTab] = useState('today');
+  const greeting = (() => {
+    const h = new Date(now).getHours();
+    if (h < 5) return "Late one";
+    if (h < 12) return "Good morning";
+    if (h < 17) return "Good afternoon";
+    if (h < 21) return "Good evening";
+    return "Up late";
+  })();
+  return (
+    <div style={{ width: '100%', minHeight: '100vh', background: T.bg, color: T.fg, fontFamily: T.fontBody }}>
+      <TopNav tab={tab} onTab={setTab} now={now} />
+      <div style={{ padding: '32px 32px 48px', maxWidth: 1600, margin: '0 auto' }}>
+        <div style={{ marginBottom: 28, display: 'flex', alignItems: 'baseline', gap: 16, flexWrap: 'wrap' }}>
+          <h1 style={{ margin: 0, fontFamily: T.fontDisplay, fontSize: 32, color: T.fg, fontWeight: T.displayWeight, letterSpacing: T.displayTracking }}>
+            {tab === 'today' ? greeting : tab === 'history' ? 'History' : 'Sleep forecast'}
+          </h1>
+          <span style={{ fontFamily: T.fontMono, fontSize: 12, color: T.muted, letterSpacing: '0.08em' }}>{new Date(now).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}</span>
+        </div>
+
+        {tab === 'today' && (
+          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1.7fr) minmax(0,1fr)', gap: 24, alignItems: 'start' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 24, minWidth: 0 }}>
+              <HeroGraph entries={entries} now={now} />
+              <CoachBanner entries={entries} />
+              <TodayLogDesktop entries={entries} removeEntry={removeEntry} updateEntryTime={updateEntryTime} />
+              <StatsStrip entries={entries} />
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+              <QuickLogDesktop onPick={setPendingDrink} onBrowse={() => setBrowseOpen(true)} columns={2} />
+              <ThisWeekCard entries={entries} />
+              <SleepCard entries={entries} now={now} />
+            </div>
+          </div>
+        )}
+        {tab === 'history' && <HistoryView entries={entries} />}
+        {tab === 'sleep' && <SleepView entries={entries} now={now} />}
+      </div>
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// ROOT — owns shared state and switches by viewport
+// ══════════════════════════════════════════════════════════════════════════
+function App() {
+  const isDesktop = useIsDesktop();
+  const [entries, setEntries] = useState(loadEntries);
+  const [browseOpen, setBrowseOpen] = useState(false);
+  const [pendingDrink, setPendingDrink] = useState(null);
+  const now = useLiveNow();
+
+  const addEntry = (drinkId, amount = 1) => {
+    const d = DRINK_BY_ID[drinkId];
+    const next = [...entries, { id: 'e' + Date.now(), drink: drinkId, amount, mg: Math.round(d.mg * amount), kcal: Math.round(d.kcal * amount), time: Date.now() }];
+    setEntries(next); saveEntries(next);
+  };
+  const removeEntry = id => {
+    const next = entries.filter(e => e.id !== id);
+    setEntries(next); saveEntries(next);
+  };
+  const updateEntryTime = (id, timeStr) => {
+    const [h, m] = timeStr.split(':').map(Number);
+    const d = new Date(); d.setHours(h, m, 0, 0);
+    const next = entries.map(e => e.id === id ? { ...e, time: d.getTime() } : e);
+    setEntries(next); saveEntries(next);
+  };
+
+  const shared = { entries, addEntry, removeEntry, updateEntryTime, now, setBrowseOpen, setPendingDrink };
+
+  return (
+    <>
+      {isDesktop ? <DesktopApp {...shared} /> : <MobileApp {...shared} />}
+      <Browse open={browseOpen} onClose={() => setBrowseOpen(false)} onPick={setPendingDrink} isDesktop={isDesktop} />
+      <AmountPicker open={pendingDrink !== null} drinkId={pendingDrink} onClose={() => setPendingDrink(null)} onConfirm={addEntry} isDesktop={isDesktop} />
+    </>
   );
 }
 
