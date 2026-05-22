@@ -1,0 +1,20 @@
+{
+  "name": "Kaffeavhengig",
+  "short_name": "Kaffe",
+  "description": "Caffeine intake tracker with real-time half-life decay.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#13110e",
+  "theme_color": "#13110e",
+  "lang": "en",
+  "icons": [
+    {
+      "src": "icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
