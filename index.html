@@ -15,13 +15,64 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@300;400;500;600&display=swap" rel="stylesheet" />
   <style>
+    :root {
+      --bg: #13110e;
+      --fg: #dcd1bb;
+      --muted: #7a6f5d;
+      --accent: #a37a4f;
+      --warn: #b89260;
+      --danger: #b6604a;
+      --ok: #869b6b;
+      --water: #7ec4d6;
+      --bonus: #d4a574;
+      --sheet-bg: #17140f;
+      --card-border-color: rgba(220,209,187,0.11);
+      --divider-color: rgba(220,209,187,0.09);
+      --track: rgba(220,209,187,0.06);
+      --grid: rgba(220,209,187,0.10);
+      --bar: rgba(163,122,79,0.55);
+      --coach-border-color: rgba(163,122,79,0.38);
+      --accent-tint: rgba(163,122,79,0.10);
+      --scrollbar-thumb: rgba(125,111,93,0.3);
+      --backdrop: rgba(0,0,0,0.55);
+      --shadow-soft: 0 2px 8px rgba(0,0,0,0.4);
+      --shadow-lift: 0 30px 80px rgba(0,0,0,0.5);
+      --shadow-sheet: 0 -20px 50px rgba(0,0,0,0.5);
+      color-scheme: dark;
+    }
+    [data-theme="light"] {
+      --bg: #faf5ea;
+      --fg: #2c2419;
+      --muted: #8a7c66;
+      --accent: #8a5a30;
+      --warn: #a87530;
+      --danger: #9a4332;
+      --ok: #5f7a4a;
+      --water: #3d7e96;
+      --bonus: #a87530;
+      --sheet-bg: #ffffff;
+      --card-border-color: rgba(44,36,25,0.14);
+      --divider-color: rgba(44,36,25,0.10);
+      --track: rgba(44,36,25,0.05);
+      --grid: rgba(44,36,25,0.10);
+      --bar: rgba(138,90,48,0.55);
+      --coach-border-color: rgba(138,90,48,0.38);
+      --accent-tint: rgba(138,90,48,0.10);
+      --scrollbar-thumb: rgba(80,65,45,0.3);
+      --backdrop: rgba(20,15,10,0.35);
+      --shadow-soft: 0 2px 8px rgba(70,50,30,0.18);
+      --shadow-lift: 0 30px 80px rgba(70,50,30,0.18);
+      --shadow-sheet: 0 -16px 40px rgba(70,50,30,0.15);
+      color-scheme: light;
+    }
     *, *::before, *::after { box-sizing: border-box; }
     html, body { margin: 0; padding: 0; min-height: 100%; }
     body {
-      background: #13110e;
-      color: #dcd1bb;
+      background: var(--bg);
+      color: var(--fg);
       font-family: 'Geist', system-ui, -apple-system, sans-serif;
       -webkit-font-smoothing: antialiased;
+      transition: background 0.25s ease, color 0.25s ease;
     }
     @keyframes kaffePulse {
       0%   { box-shadow: 0 0 0 0 currentColor; }
@@ -58,14 +109,24 @@
       100% { opacity: 0; transform: translateY(-2px); }
     }
     input[type="range"] { -webkit-appearance: none; height: 26px; background: transparent; width: 100%; }
-    input[type="range"]::-webkit-slider-runnable-track { height: 3px; border-radius: 1px; background: rgba(220,209,187,0.10); }
-    input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 16px; height: 16px; border-radius: 50%; background: #a37a4f; margin-top: -6px; border: 2px solid #13110e; box-shadow: 0 2px 8px rgba(0,0,0,0.4); cursor: pointer; }
+    input[type="range"]::-webkit-slider-runnable-track { height: 3px; border-radius: 1px; background: var(--grid); }
+    input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 16px; height: 16px; border-radius: 50%; background: var(--accent); margin-top: -6px; border: 2px solid var(--bg); box-shadow: var(--shadow-soft); cursor: pointer; }
     ::-webkit-scrollbar { width: 8px; height: 8px; }
-    ::-webkit-scrollbar-thumb { background: rgba(125,111,93,0.3); border-radius: 4px; }
+    ::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb); border-radius: 4px; }
     ::-webkit-scrollbar-track { background: transparent; }
     .kaffe-mobile ::-webkit-scrollbar { display: none; }
     .kaffe-mobile { scrollbar-width: none; }
   </style>
+  <script>
+    (function() {
+      try {
+        var t = localStorage.getItem('kaffe-theme') || 'dark';
+        document.documentElement.setAttribute('data-theme', t);
+        var m = document.querySelector('meta[name="theme-color"]');
+        if (m) m.setAttribute('content', t === 'light' ? '#faf5ea' : '#13110e');
+      } catch (e) {}
+    })();
+  </script>
   <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" crossorigin="anonymous"></script>
   <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" crossorigin="anonymous"></script>
   <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
@@ -75,26 +136,26 @@
   <script type="text/babel" data-presets="env,react">
 const { useState, useEffect, useRef, useMemo, useCallback } = React;
 
-// ── Theme — Single Origin, dark ────────────────────────────────────────────
+// ── Theme — Single Origin, CSS-var-backed (dark + light) ───────────────────
 const T = {
-  bg: '#13110e',
-  fg: '#dcd1bb',
-  muted: '#7a6f5d',
-  accent: '#a37a4f',
-  warn: '#b89260',
-  danger: '#b6604a',
-  ok: '#869b6b',
-  water: '#7ec4d6',
-  bonus: '#d4a574',
+  bg: 'var(--bg)',
+  fg: 'var(--fg)',
+  muted: 'var(--muted)',
+  accent: 'var(--accent)',
+  warn: 'var(--warn)',
+  danger: 'var(--danger)',
+  ok: 'var(--ok)',
+  water: 'var(--water)',
+  bonus: 'var(--bonus)',
   card: 'transparent',
-  cardBorder: '1px solid rgba(220,209,187,0.11)',
-  divider: '1px solid rgba(220,209,187,0.09)',
-  track: 'rgba(220,209,187,0.06)',
-  grid: 'rgba(220,209,187,0.10)',
-  bar: 'rgba(163,122,79,0.55)',
+  cardBorder: '1px solid var(--card-border-color)',
+  divider: '1px solid var(--divider-color)',
+  track: 'var(--track)',
+  grid: 'var(--grid)',
+  bar: 'var(--bar)',
   glyphBg: 'transparent',
-  coachBorder: '1px solid rgba(163,122,79,0.38)',
-  sheetBg: '#17140f',
+  coachBorder: '1px solid var(--coach-border-color)',
+  sheetBg: 'var(--sheet-bg)',
   radius: 2,
   fontDisplay: "'IBM Plex Mono', monospace",
   fontMono: "'IBM Plex Mono', monospace",
@@ -103,6 +164,11 @@ const T = {
   displaySize: 22,
   displayTracking: '-0.02em',
 };
+
+// Mix a CSS color with transparency. Use this for theme-aware alpha
+// derivations instead of '#hex' + 'aa' concatenation (which breaks when the
+// color is a `var(--x)` reference).
+const alpha = (color, pct) => `color-mix(in srgb, ${color} ${pct}%, transparent)`;
 
 // ── Data ───────────────────────────────────────────────────────────────────
 const CATEGORIES = [
@@ -190,6 +256,16 @@ function makeMonthHistory() {
   ];
 }
 
+// ── Haptics (mobile only) ──────────────────────────────────────────────────
+// No-op when the API is missing or the device ignores it (most desktops).
+function buzz(pattern = 8) {
+  try {
+    if (typeof navigator !== 'undefined' && navigator.vibrate) {
+      navigator.vibrate(pattern);
+    }
+  } catch {}
+}
+
 // ── Storage ────────────────────────────────────────────────────────────────
 const STORE_KEY = 'kaffe-log-v1';
 const WATER_KEY = 'kaffe-water-log-v1';
@@ -254,6 +330,57 @@ function useElementWidth(deps = []) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, deps);
   return [ref, w];
+}
+const THEME_KEY = 'kaffe-theme';
+function useTheme() {
+  const [theme, setTheme] = useState(() => {
+    try { return document.documentElement.getAttribute('data-theme') || localStorage.getItem(THEME_KEY) || 'dark'; }
+    catch { return 'dark'; }
+  });
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme);
+    const m = document.querySelector('meta[name="theme-color"]');
+    if (m) m.setAttribute('content', theme === 'light' ? '#faf5ea' : '#13110e');
+    try { localStorage.setItem(THEME_KEY, theme); } catch {}
+  }, [theme]);
+  const toggle = useCallback(() => setTheme(t => t === 'dark' ? 'light' : 'dark'), []);
+  return [theme, toggle];
+}
+
+function ThemeToggle({ size = 18 }) {
+  const [theme, toggle] = useTheme();
+  const isLight = theme === 'light';
+  const isDesktop = useIsDesktop();
+  const handle = () => { if (!isDesktop) buzz(6); toggle(); };
+  return (
+    <button
+      onClick={handle}
+      aria-label={isLight ? 'Switch to dark theme' : 'Switch to light theme'}
+      title={isLight ? 'Switch to dark theme' : 'Switch to light theme'}
+      style={{
+        width: size + 18, height: size + 18,
+        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+        background: 'transparent', border: T.cardBorder, borderRadius: T.radius,
+        cursor: 'pointer', color: T.muted, padding: 0,
+        transition: 'color 0.2s ease, border-color 0.2s ease',
+      }}
+      onMouseEnter={e => { e.currentTarget.style.color = T.fg; }}
+      onMouseLeave={e => { e.currentTarget.style.color = T.muted; }}
+    >
+      {isLight ? (
+        // Moon (click → switch to dark)
+        <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z" />
+        </svg>
+      ) : (
+        // Sun (click → switch to light)
+        <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+          <circle cx="12" cy="12" r="3.6" />
+          <path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M5.6 18.4 7 17M17 7l1.4-1.4" />
+        </svg>
+      )}
+    </button>
+  );
 }
 
 // ── Drink glyph icons ──────────────────────────────────────────────────────
@@ -382,7 +509,7 @@ function BrowseSheet({ open, onClose, onPick }) {
         </div>
         <div style={{ flex: 1, overflowY: 'auto', padding: '0 18px 32px' }}>
           {filtered.map((d, i) => (
-            <button key={d.id} onClick={() => { onPick(d.id); onClose(); }} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 12, padding: '10px 4px', border: 'none', borderBottom: i < filtered.length - 1 ? T.divider : 'none', background: 'transparent', cursor: 'pointer', color: T.fg, textAlign: 'left' }}>
+            <button key={d.id} onClick={() => { buzz(8); onPick(d.id); onClose(); }} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 12, padding: '10px 4px', border: 'none', borderBottom: i < filtered.length - 1 ? T.divider : 'none', background: 'transparent', cursor: 'pointer', color: T.fg, textAlign: 'left' }}>
               <div style={{ width: 36, height: 36, borderRadius: T.radius, background: T.glyphBg, border: T.cardBorder, display: 'flex', alignItems: 'center', justifyContent: 'center', color: T.accent, flexShrink: 0 }}><DrinkGlyph cat={d.cat} /></div>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontFamily: T.fontBody, fontSize: 13.5, fontWeight: 500, color: T.fg, marginBottom: 2 }}>{d.name}</div>
@@ -471,6 +598,17 @@ function portionLabel(amount) {
 function AmountBody({ d, amount, setAmount, onClose, onConfirm }) {
   const mg = Math.round(d.mg * amount);
   const kcal = Math.round(d.kcal * amount);
+  // Detent vibration: buzz only when crossing a quarter step (0.25 units).
+  const lastDetentRef = useRef(Math.floor(amount * 4));
+  const onSliderChange = e => {
+    const v = Number(e.target.value);
+    const d4 = Math.floor(v * 4);
+    if (d4 !== lastDetentRef.current) {
+      lastDetentRef.current = d4;
+      buzz(4);
+    }
+    setAmount(v);
+  };
   return (
     <>
       <div style={{ padding: '14px 22px 4px', display: 'flex', alignItems: 'center', gap: 14 }}>
@@ -479,7 +617,7 @@ function AmountBody({ d, amount, setAmount, onClose, onConfirm }) {
           <div style={{ fontFamily: T.fontDisplay, fontSize: T.displaySize, color: T.fg, fontWeight: T.displayWeight, letterSpacing: T.displayTracking, lineHeight: 1.15 }}>{d.name}</div>
           <div style={{ fontFamily: T.fontMono, fontSize: 10, color: T.muted, letterSpacing: '0.06em', marginTop: 4, textTransform: 'uppercase' }}>{d.serving} · {d.mg} mg · {d.kcal} kcal / serving</div>
         </div>
-        <button onClick={onClose} style={{ background: T.track, border: 'none', color: T.fg, width: 30, height: 30, borderRadius: T.radius, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+        <button onClick={() => { buzz(6); onClose(); }} style={{ background: T.track, border: 'none', color: T.fg, width: 30, height: 30, borderRadius: T.radius, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg>
         </button>
       </div>
@@ -488,14 +626,14 @@ function AmountBody({ d, amount, setAmount, onClose, onConfirm }) {
         {PORTIONS.map(p => {
           const sel = Math.abs(p.value - amount) < 0.001;
           return (
-            <button key={p.value} onClick={() => setAmount(p.value)} style={{ padding: '16px 8px', borderRadius: T.radius, border: sel ? `1px solid ${T.accent}` : T.cardBorder, background: sel ? 'rgba(163,122,79,0.10)' : 'transparent', color: sel ? T.accent : T.fg, fontFamily: T.fontDisplay, fontSize: 22, fontWeight: T.displayWeight, letterSpacing: T.displayTracking, cursor: 'pointer', transition: 'all 0.15s' }}>
+            <button key={p.value} onClick={() => { buzz(8); lastDetentRef.current = Math.floor(p.value * 4); setAmount(p.value); }} style={{ padding: '16px 8px', borderRadius: T.radius, border: sel ? `1px solid ${T.accent}` : T.cardBorder, background: sel ? 'var(--accent-tint)' : 'transparent', color: sel ? T.accent : T.fg, fontFamily: T.fontDisplay, fontSize: 22, fontWeight: T.displayWeight, letterSpacing: T.displayTracking, cursor: 'pointer', transition: 'all 0.15s' }}>
               {p.label}
             </button>
           );
         })}
       </div>
       <div style={{ padding: '18px 22px 4px', display: 'flex', alignItems: 'center', gap: 10 }}>
-        <input type="range" min="0.1" max="3" step="0.05" value={amount} onChange={e => setAmount(Number(e.target.value))} style={{ flex: 1 }} />
+        <input type="range" min="0.1" max="3" step="0.05" value={amount} onChange={onSliderChange} style={{ flex: 1 }} />
         <span style={{ fontFamily: T.fontMono, fontSize: 11, color: T.muted, letterSpacing: '0.04em', minWidth: 44, textAlign: 'right' }}>×{amount.toFixed(2).replace(/\.?0+$/, '')}</span>
       </div>
       <div style={{ padding: '14px 22px 0', display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', borderTop: T.divider, marginTop: 4, paddingTop: 14 }}>
@@ -507,7 +645,7 @@ function AmountBody({ d, amount, setAmount, onClose, onConfirm }) {
         </div>
       </div>
       <div style={{ padding: '16px 22px 0' }}>
-        <button onClick={() => { onConfirm(d.id, amount); onClose(); }} style={{ width: '100%', padding: '14px', borderRadius: T.radius, border: 'none', background: T.accent, color: T.bg, fontFamily: T.fontMono, fontSize: 11, fontWeight: 600, letterSpacing: '0.18em', textTransform: 'uppercase', cursor: 'pointer' }}>
+        <button onClick={() => { buzz([10, 30, 14]); onConfirm(d.id, amount); onClose(); }} style={{ width: '100%', padding: '14px', borderRadius: T.radius, border: 'none', background: T.accent, color: T.bg, fontFamily: T.fontMono, fontSize: 11, fontWeight: 600, letterSpacing: '0.18em', textTransform: 'uppercase', cursor: 'pointer' }}>
           Add to log
         </button>
       </div>
@@ -563,6 +701,7 @@ function HydroCard({ waters, addWater }) {
   const [pendingBonus, setPendingBonus] = useState(false);
   const [displayPoints, setDisplayPoints] = useState(() => hydroPoints(waters));
   const [pulseKey, setPulseKey] = useState(0);
+  const isDesktop = useIsDesktop();
   const timers = useRef([]);
 
   const points = hydroPoints(waters);
@@ -570,7 +709,6 @@ function HydroCard({ waters, addWater }) {
   const bonusCount = waters.filter(w => w.bonus).length;
 
   useEffect(() => {
-    // keep counter in sync when waters change from outside (e.g., removal)
     if (phase === 'idle') setDisplayPoints(points);
   }, [points, phase]);
 
@@ -585,183 +723,167 @@ function HydroCard({ waters, addWater }) {
     if (phase !== 'idle') return;
     const rec = addWater();
     const bonus = !!(rec && rec.bonus);
+    if (!isDesktop) buzz(bonus ? [12, 50, 28] : 14);
     setPendingBonus(bonus);
     setPhase('filling');
 
-    const dropCount = bonus ? 12 : 8;
+    const dropCount = bonus ? 11 : 7;
     const drops = Array.from({ length: dropCount }, (_, i) => {
       const angle = (Math.PI * (0.15 + 0.7 * (i / Math.max(dropCount - 1, 1)))) - Math.PI * 0.075;
-      const speed = 70 + Math.random() * 55;
+      const speed = 55 + Math.random() * 50;
       const dx = Math.cos(angle) * speed * (Math.random() < 0.5 ? -1 : 1);
-      const dy = 90 + Math.random() * 70;
-      const peak = -(40 + Math.random() * 30);
-      const size = 5 + Math.random() * 5;
+      const dy = 70 + Math.random() * 55;
+      const peak = -(32 + Math.random() * 24);
+      const size = 4 + Math.random() * 4;
       return {
         id: 'd' + Date.now() + '-' + i,
         dx: `${dx.toFixed(1)}px`,
         dy: `${dy.toFixed(1)}px`,
         peak: `${peak.toFixed(1)}px`,
         size,
-        delay: Math.random() * 180,
+        delay: Math.random() * 160,
         bonus,
       };
     });
 
-    schedule(() => {
-      setPhase('bursting');
-      setDroplets(drops);
-    }, 380);
-
+    schedule(() => { setPhase('bursting'); setDroplets(drops); }, 360);
     schedule(() => {
       setDisplayPoints(p => p + (bonus ? 2 : 1));
       setPulseKey(k => k + 1);
-    }, 880);
-
-    schedule(() => setPhase('draining'), 1120);
-    schedule(() => { setPhase('idle'); setDroplets([]); }, 1600);
+    }, 820);
+    schedule(() => setPhase('draining'), 1040);
+    schedule(() => { setPhase('idle'); setDroplets([]); }, 1500);
   };
 
+  const BTN = 56; // circle button diameter
   const fillHeight = phase === 'filling' || phase === 'bursting' ? '100%' : '0%';
-  const fillTransition = phase === 'filling' ? 'height 600ms cubic-bezier(0.22, 1, 0.36, 1)'
-    : phase === 'draining' ? 'height 460ms cubic-bezier(0.55, 0, 0.7, 0.2), opacity 460ms ease-out'
+  const fillTransition = phase === 'filling' ? 'height 580ms cubic-bezier(0.22, 1, 0.36, 1)'
+    : phase === 'draining' ? 'height 420ms cubic-bezier(0.55, 0, 0.7, 0.2), opacity 420ms ease-out'
     : 'none';
   const fillOpacity = phase === 'draining' ? 0.45 : 1;
+  const accentNow = pendingBonus && phase !== 'idle' ? T.bonus : T.water;
 
   return (
-    <Card padding={16}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10 }}>
-        <div style={{ fontFamily: T.fontMono, fontSize: 10, letterSpacing: '0.18em', textTransform: 'uppercase', color: T.muted, fontWeight: 500 }}>Hydro</div>
-        {bonusCount > 0 && (
-          <div style={{ fontFamily: T.fontMono, fontSize: 9.5, letterSpacing: '0.14em', textTransform: 'uppercase', color: T.bonus, fontWeight: 600 }}>
-            {bonusCount} bonus
+    <Card padding={14}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+            <div style={{ fontFamily: T.fontMono, fontSize: 10, letterSpacing: '0.18em', textTransform: 'uppercase', color: T.muted, fontWeight: 500 }}>Hydro</div>
+            {bonusCount > 0 && (
+              <div style={{ fontFamily: T.fontMono, fontSize: 9, letterSpacing: '0.14em', textTransform: 'uppercase', color: T.bonus, fontWeight: 600 }}>
+                {bonusCount} bonus
+              </div>
+            )}
           </div>
-        )}
-      </div>
-      <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 4 }}>
-        <span
-          key={pulseKey}
-          style={{
-            display: 'inline-block',
-            fontFamily: T.fontDisplay,
-            fontSize: 44,
-            lineHeight: 1,
-            color: pendingBonus && phase !== 'idle' ? T.bonus : T.water,
-            fontWeight: T.displayWeight,
-            letterSpacing: T.displayTracking,
-            fontFeatureSettings: '"tnum"',
-            transition: 'color 0.3s ease',
-            animation: pulseKey > 0 ? 'kaffePointPulse 420ms cubic-bezier(0.34, 1.56, 0.64, 1)' : 'none',
-            transformOrigin: 'left center',
-          }}
-        >{displayPoints}</span>
-        <span style={{ fontFamily: T.fontMono, fontSize: 10, color: T.muted, letterSpacing: '0.06em' }}>
-          {displayPoints === 1 ? 'point' : 'points'}
-        </span>
-      </div>
-      <div style={{ fontFamily: T.fontBody, fontSize: 12.5, color: T.muted, marginBottom: 14 }}>
-        {glasses === 0
-          ? "No glasses yet. Sip something to start."
-          : `${glasses} ${glasses === 1 ? 'glass' : 'glasses'} today${bonusCount > 0 ? ` · +${bonusCount} bonus` : ''}`}
-      </div>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+            <span
+              key={pulseKey}
+              style={{
+                display: 'inline-block',
+                fontFamily: T.fontDisplay,
+                fontSize: 30,
+                lineHeight: 1,
+                color: accentNow,
+                fontWeight: T.displayWeight,
+                letterSpacing: T.displayTracking,
+                fontFeatureSettings: '"tnum"',
+                transition: 'color 0.3s ease',
+                animation: pulseKey > 0 ? 'kaffePointPulse 420ms cubic-bezier(0.34, 1.56, 0.64, 1)' : 'none',
+                transformOrigin: 'left center',
+              }}
+            >{displayPoints}</span>
+            <span style={{ fontFamily: T.fontMono, fontSize: 10.5, color: T.muted, letterSpacing: '0.04em' }}>
+              {glasses === 0 ? 'tap to start' : `${glasses} ${glasses === 1 ? 'glass' : 'glasses'}`}
+            </span>
+          </div>
+        </div>
 
-      <button
-        onClick={handleClick}
-        disabled={phase !== 'idle'}
-        style={{
-          position: 'relative',
-          overflow: 'hidden',
-          width: '100%',
-          padding: '14px 16px',
-          background: T.track,
-          border: `1px solid ${T.water}55`,
-          borderRadius: T.radius,
-          cursor: phase === 'idle' ? 'pointer' : 'default',
-          color: T.fg,
-          fontFamily: T.fontBody,
-          fontSize: 14,
-          fontWeight: 500,
-          letterSpacing: '0.01em',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          gap: 10,
-          minHeight: 52,
-          transition: 'border-color 0.2s ease, transform 0.1s',
-        }}
-        onMouseDown={e => { if (phase === 'idle') e.currentTarget.style.transform = 'scale(0.985)'; }}
-        onMouseUp={e => e.currentTarget.style.transform = 'scale(1)'}
-        onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}
-      >
-        {/* Water fill layer */}
-        <div
-          aria-hidden
-          style={{
-            position: 'absolute',
-            left: 0, right: 0, bottom: 0,
-            height: fillHeight,
-            background: pendingBonus
-              ? `linear-gradient(180deg, ${T.bonus}66 0%, ${T.water}88 30%, ${T.water}cc 100%)`
-              : `linear-gradient(180deg, ${T.water}55 0%, ${T.water}88 30%, ${T.water}cc 100%)`,
-            transition: fillTransition,
-            opacity: fillOpacity,
-            pointerEvents: 'none',
-            zIndex: 0,
-          }}
-        />
-        {/* Water surface ripple */}
-        {(phase === 'filling' || phase === 'bursting') && (
-          <div
-            aria-hidden
-            style={{
-              position: 'absolute',
-              left: 0, right: 0,
-              bottom: 'calc(100% - 4px)',
-              height: 0,
-              pointerEvents: 'none',
-              zIndex: 1,
-            }}
-          >
-            <div style={{
-              position: 'absolute', left: 0, right: 0, top: -3, height: 6,
-              background: `linear-gradient(180deg, transparent, ${T.water})`,
-              opacity: 0.7,
-              animation: 'kaffeWaterWobble 1.4s ease-in-out infinite',
-              borderRadius: '50%',
-              transform: 'translateX(-12px)',
-            }} />
+        {/* Circle button — water fills inside, droplets burst outward */}
+        <div style={{ position: 'relative', width: BTN, height: BTN, flexShrink: 0 }}>
+          {/* Droplet burst layer (sibling, so droplets aren't clipped by button overflow:hidden) */}
+          <div aria-hidden style={{ position: 'absolute', left: '50%', top: '50%', width: 0, height: 0, pointerEvents: 'none', zIndex: 4 }}>
+            {droplets.map(d => (
+              <div
+                key={d.id}
+                style={{
+                  position: 'absolute',
+                  left: -d.size / 2,
+                  top: -d.size / 2,
+                  width: d.size,
+                  height: d.size,
+                  borderRadius: '50% 50% 50% 50% / 60% 60% 40% 40%',
+                  background: d.bonus ? T.bonus : T.water,
+                  boxShadow: `0 0 6px ${alpha(d.bonus ? T.bonus : T.water, 53)}`,
+                  opacity: 0,
+                  ['--dx']: d.dx,
+                  ['--dy']: d.dy,
+                  ['--peak']: d.peak,
+                  animation: `kaffeDroplet 900ms cubic-bezier(0.22, 0.61, 0.36, 1) ${d.delay}ms forwards`,
+                }}
+              />
+            ))}
           </div>
-        )}
-        {/* Droplet burst layer */}
-        <div aria-hidden style={{ position: 'absolute', left: '50%', top: '50%', width: 0, height: 0, pointerEvents: 'none', zIndex: 2 }}>
-          {droplets.map(d => (
+
+          <button
+            onClick={handleClick}
+            disabled={phase !== 'idle'}
+            aria-label="Add glass of water"
+            title={phase === 'idle' ? 'Add a glass of water' : ''}
+            style={{
+              position: 'relative',
+              overflow: 'hidden',
+              width: BTN, height: BTN,
+              borderRadius: '50%',
+              background: T.track,
+              border: `1px solid ${alpha(T.water, 33)}`,
+              cursor: phase === 'idle' ? 'pointer' : 'default',
+              color: accentNow,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: 0,
+              transition: 'border-color 0.2s ease, transform 0.1s, box-shadow 0.25s ease',
+              boxShadow: phase === 'bursting' ? `0 0 0 4px ${alpha(accentNow, 25)}` : 'none',
+            }}
+            onMouseDown={e => { if (phase === 'idle') e.currentTarget.style.transform = 'scale(0.94)'; }}
+            onMouseUp={e => e.currentTarget.style.transform = 'scale(1)'}
+            onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}
+          >
+            {/* Water fill inside the circle */}
             <div
-              key={d.id}
+              aria-hidden
               style={{
                 position: 'absolute',
-                left: -d.size / 2,
-                top: -d.size / 2,
-                width: d.size,
-                height: d.size,
-                borderRadius: '50% 50% 50% 50% / 60% 60% 40% 40%',
-                background: d.bonus ? T.bonus : T.water,
-                boxShadow: `0 0 8px ${d.bonus ? T.bonus : T.water}88`,
-                opacity: 0,
-                ['--dx']: d.dx,
-                ['--dy']: d.dy,
-                ['--peak']: d.peak,
-                animation: `kaffeDroplet 950ms cubic-bezier(0.22, 0.61, 0.36, 1) ${d.delay}ms forwards`,
+                left: 0, right: 0, bottom: 0,
+                height: fillHeight,
+                background: pendingBonus
+                  ? `linear-gradient(180deg, ${alpha(T.bonus, 40)} 0%, ${alpha(T.water, 53)} 30%, ${alpha(T.water, 80)} 100%)`
+                  : `linear-gradient(180deg, ${alpha(T.water, 33)} 0%, ${alpha(T.water, 53)} 30%, ${alpha(T.water, 80)} 100%)`,
+                transition: fillTransition,
+                opacity: fillOpacity,
+                pointerEvents: 'none',
+                zIndex: 0,
               }}
             />
-          ))}
+            {/* Water surface wobble */}
+            {(phase === 'filling' || phase === 'bursting') && (
+              <div aria-hidden style={{ position: 'absolute', left: 0, right: 0, bottom: 'calc(100% - 3px)', height: 0, pointerEvents: 'none', zIndex: 1 }}>
+                <div style={{
+                  position: 'absolute', left: -8, right: -8, top: -2, height: 5,
+                  background: `linear-gradient(180deg, transparent, ${T.water})`,
+                  opacity: 0.6,
+                  animation: 'kaffeWaterWobble 1.4s ease-in-out infinite',
+                  borderRadius: '50%',
+                }} />
+              </div>
+            )}
+            {/* Glyph */}
+            <span style={{ position: 'relative', zIndex: 2, display: 'inline-flex' }}>
+              <WaterDropGlyph size={22} />
+            </span>
+          </button>
         </div>
-        {/* Button label */}
-        <span style={{ position: 'relative', zIndex: 3, display: 'flex', alignItems: 'center', gap: 10, color: T.fg, mixBlendMode: 'normal' }}>
-          <span style={{ color: T.water, display: 'inline-flex' }}>
-            <WaterDropGlyph size={18} />
-          </span>
-          {phase === 'idle' ? 'Add glass of water' : pendingBonus ? '+2 bonus!' : '+1 point'}
-        </span>
-      </button>
+      </div>
     </Card>
   );
 }
@@ -800,9 +922,12 @@ function MobileApp({ entries, addEntry, removeEntry, updateEntryTime, waters, ad
 
   return (
     <div className="kaffe-mobile" style={{ maxWidth: 480, margin: '0 auto', padding: '24px 18px 60px', display: 'flex', flexDirection: 'column', gap: 16 }}>
-      <div style={{ paddingTop: 6 }}>
-        <div style={{ fontFamily: T.fontMono, fontSize: 10, letterSpacing: '0.18em', textTransform: 'uppercase', color: T.muted, marginBottom: 4 }}>{greeting.toUpperCase()}</div>
-        <div style={{ fontFamily: T.fontDisplay, fontSize: 30, lineHeight: 1.05, color: T.fg, fontWeight: T.displayWeight, letterSpacing: T.displayTracking }}>Today</div>
+      <div style={{ paddingTop: 6, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
+        <div>
+          <div style={{ fontFamily: T.fontMono, fontSize: 10, letterSpacing: '0.18em', textTransform: 'uppercase', color: T.muted, marginBottom: 4 }}>{greeting.toUpperCase()}</div>
+          <div style={{ fontFamily: T.fontDisplay, fontSize: 30, lineHeight: 1.05, color: T.fg, fontWeight: T.displayWeight, letterSpacing: T.displayTracking }}>Today</div>
+        </div>
+        <ThemeToggle />
       </div>
 
       <Card padding={16}>
@@ -850,13 +975,13 @@ function MobileApp({ entries, addEntry, removeEntry, updateEntryTime, waters, ad
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0 4px' }}>
           <div style={{ fontFamily: T.fontMono, fontSize: 10, letterSpacing: '0.14em', textTransform: 'uppercase', color: T.muted, fontWeight: 500 }}>Quick log</div>
-          <button onClick={() => setBrowseOpen(true)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontFamily: T.fontMono, fontSize: 10, letterSpacing: '0.14em', textTransform: 'uppercase', color: T.accent, padding: '4px 0' }}>Browse all →</button>
+          <button onClick={() => { buzz(6); setBrowseOpen(true); }} style={{ background: 'none', border: 'none', cursor: 'pointer', fontFamily: T.fontMono, fontSize: 10, letterSpacing: '0.14em', textTransform: 'uppercase', color: T.accent, padding: '4px 0' }}>Browse all →</button>
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
           {QUICK.map(id => {
             const d = DRINK_BY_ID[id];
             return (
-              <button key={id} onClick={() => setPendingDrink(id)}
+              <button key={id} onClick={() => { buzz(8); setPendingDrink(id); }}
                 style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', background: T.card, border: T.cardBorder, borderRadius: T.radius, cursor: 'pointer', color: T.fg, textAlign: 'left', transition: 'transform 0.1s' }}
                 onMouseDown={e => e.currentTarget.style.transform = 'scale(0.97)'}
                 onMouseUp={e => e.currentTarget.style.transform = 'scale(1)'}
@@ -891,11 +1016,11 @@ function MobileApp({ entries, addEntry, removeEntry, updateEntryTime, waters, ad
                 const iconColor = row.bonus ? T.bonus : T.water;
                 return (
                   <div key={row.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', borderBottom: i < arr.length - 1 ? T.divider : 'none' }}>
-                    <div style={{ width: 36, height: 36, borderRadius: T.radius, border: `1px solid ${iconColor}40`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: iconColor, flexShrink: 0 }}><WaterDropGlyph /></div>
+                    <div style={{ width: 36, height: 36, borderRadius: T.radius, border: `1px solid ${alpha(iconColor, 25)}`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: iconColor, flexShrink: 0 }}><WaterDropGlyph /></div>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontFamily: T.fontBody, fontSize: 13, fontWeight: 500, color: T.fg, marginBottom: 4, display: 'flex', alignItems: 'center', gap: 6 }}>
                         <span>Water</span>
-                        <span style={{ fontFamily: T.fontMono, fontSize: 10, color: iconColor, border: `1px solid ${iconColor}55`, padding: '0 5px', borderRadius: T.radius, letterSpacing: '0.04em' }}>{row.bonus ? '+2 BONUS' : '+1'}</span>
+                        <span style={{ fontFamily: T.fontMono, fontSize: 10, color: iconColor, border: `1px solid ${alpha(iconColor, 33)}`, padding: '0 5px', borderRadius: T.radius, letterSpacing: '0.04em' }}>{row.bonus ? '+2 BONUS' : '+1'}</span>
                       </div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                         <input
@@ -921,7 +1046,7 @@ function MobileApp({ entries, addEntry, removeEntry, updateEntryTime, waters, ad
                     <div style={{ fontFamily: T.fontBody, fontSize: 13, fontWeight: 500, color: T.fg, marginBottom: 4, display: 'flex', alignItems: 'center', gap: 6 }}>
                       <span>{d.name}</span>
                       {row.amount && Math.abs(row.amount - 1) > 0.001 && (
-                        <span style={{ fontFamily: T.fontMono, fontSize: 10, color: T.accent, border: `1px solid ${T.accent}55`, padding: '0 5px', borderRadius: T.radius, letterSpacing: '0.04em' }}>{portionLabel(row.amount)}×</span>
+                        <span style={{ fontFamily: T.fontMono, fontSize: 10, color: T.accent, border: `1px solid ${alpha(T.accent, 33)}`, padding: '0 5px', borderRadius: T.radius, letterSpacing: '0.04em' }}>{portionLabel(row.amount)}×</span>
                       )}
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -982,6 +1107,7 @@ function TopNav({ tab, onTab, now }) {
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 18 }}>
         <span style={{ fontFamily: T.fontMono, fontSize: 12, color: T.muted, letterSpacing: '0.04em' }}>{dateStr}</span>
+        <ThemeToggle />
       </div>
     </div>
   );
@@ -1100,7 +1226,7 @@ function TodayLogDesktop({ entries, removeEntry, updateEntryTime, waters, remove
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontFamily: T.fontBody, fontSize: 13.5, color: T.fg, fontWeight: 500, marginBottom: 4, display: 'flex', alignItems: 'center', gap: 8 }}>
                   <span>Water</span>
-                  <span style={{ fontFamily: T.fontMono, fontSize: 10, color: iconColor, border: `1px solid ${iconColor}55`, padding: '0 5px', borderRadius: T.radius, letterSpacing: '0.04em' }}>{row.bonus ? '+2 BONUS' : '+1'}</span>
+                  <span style={{ fontFamily: T.fontMono, fontSize: 10, color: iconColor, border: `1px solid ${alpha(iconColor, 33)}`, padding: '0 5px', borderRadius: T.radius, letterSpacing: '0.04em' }}>{row.bonus ? '+2 BONUS' : '+1'}</span>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <input type="time" value={timeVal} onChange={ev => updateWaterTime(row.id, ev.target.value)}
@@ -1122,7 +1248,7 @@ function TodayLogDesktop({ entries, removeEntry, updateEntryTime, waters, remove
               <div style={{ fontFamily: T.fontBody, fontSize: 13.5, color: T.fg, fontWeight: 500, marginBottom: 4, display: 'flex', alignItems: 'center', gap: 8 }}>
                 <span>{d.name}</span>
                 {row.amount && Math.abs(row.amount - 1) > 0.001 && (
-                  <span style={{ fontFamily: T.fontMono, fontSize: 10, color: T.accent, border: `1px solid ${T.accent}55`, padding: '0 5px', borderRadius: T.radius, letterSpacing: '0.04em' }}>{portionLabel(row.amount)}×</span>
+                  <span style={{ fontFamily: T.fontMono, fontSize: 10, color: T.accent, border: `1px solid ${alpha(T.accent, 33)}`, padding: '0 5px', borderRadius: T.radius, letterSpacing: '0.04em' }}>{portionLabel(row.amount)}×</span>
                 )}
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
