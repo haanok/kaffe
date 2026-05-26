@@ -1046,6 +1046,18 @@ const RECIPES = [
   { ing: ['matcha','hot-water'],                            name: 'Matcha Tea',        tagline: 'Pure green energy.',              drinkId: 'green-tea'    },
   { ing: ['espresso','cold-water','ice'],                   name: 'Cold-Brew Style',   tagline: 'Improvised, but it works.',       drinkId: 'cold-brew'    },
   { ing: ['espresso','espresso','ice','cold-milk'],         name: 'Iced Double Latte', tagline: 'Big chill, big buzz.',            drinkId: 'latte'        },
+  { ing: ['espresso','milk-foam'],                          name: 'Macchiato',         tagline: 'Espresso, marked with foam.',     drinkId: 'espresso'     },
+  { ing: ['espresso','cold-milk'],                          name: 'Cortado',           tagline: 'Small, balanced, cold-milk-quiet.', drinkId: 'latte'      },
+  { ing: ['espresso','espresso','espresso'],                name: 'Triple Shot',       tagline: 'Three shots. No promises.',       drinkId: 'dbl-espresso' },
+  { ing: ['espresso','steamed-milk','steamed-milk','milk-foam'], name: 'Wet Cappuccino',tagline: 'Cappuccino, milkier.',          drinkId: 'cappuccino'   },
+  { ing: ['espresso','steamed-milk','milk-foam','vanilla'], name: 'Vanilla Cappuccino', tagline: 'Cappuccino with a sweet whisper.', drinkId: 'cappuccino' },
+  { ing: ['espresso','hot-water','vanilla'],                name: 'Vanilla Americano', tagline: 'Americano, dressed up.',          drinkId: 'americano'    },
+  { ing: ['espresso','cold-milk','chocolate','ice'],        name: 'Iced Mocha',        tagline: 'Chocolate, espresso, cold.',      drinkId: 'mocha'        },
+  { ing: ['matcha','cold-milk','ice'],                      name: 'Iced Matcha',       tagline: 'Green and bracing.',              drinkId: 'matcha'       },
+  { ing: ['matcha','steamed-milk','vanilla'],               name: 'Vanilla Matcha',    tagline: 'Matcha, smoother.',               drinkId: 'matcha'       },
+  { ing: ['espresso','chocolate','whipped'],                name: 'Mocha Whip',        tagline: 'Espresso, chocolate, cloud.',     drinkId: 'mocha'        },
+  { ing: ['espresso','whipped'],                            name: 'Espresso Con Panna', tagline: 'Shot with a dollop of cream.',   drinkId: 'espresso'     },
+  { ing: ['espresso','milk-foam','chocolate'],              name: 'Mocha Macchiato',   tagline: 'Espresso, chocolate, foam.',      drinkId: 'mocha'        },
 ];
 const blendKey = arr => [...arr].sort().join('|');
 const RECIPE_BY_KEY = Object.fromEntries(RECIPES.map(r => [blendKey(r.ing), r]));
@@ -1059,6 +1071,48 @@ function BlendIcon({ size = 18 }) {
       <path d="M7.5 14h9" />
     </svg>
   );
+}
+
+// Returns a stroke color (white-ish or dark-ish) that contrasts against the
+// ingredient's base color, so the icon stays legible on top of the gradient bar.
+function ingredientIconStroke(ing) {
+  const hex = ing.color.replace('#', '');
+  const r = parseInt(hex.slice(0, 2), 16);
+  const g = parseInt(hex.slice(2, 4), 16);
+  const b = parseInt(hex.slice(4, 6), 16);
+  const lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  return lum < 0.55 ? 'rgba(255,255,255,0.95)' : 'rgba(40,30,20,0.82)';
+}
+
+function IngredientIcon({ id, size = 16 }) {
+  const s = size, c = 'currentColor', sw = 1.6;
+  const common = { width: s, height: s, viewBox: '0 0 24 24', fill: 'none', stroke: c, strokeWidth: sw, strokeLinecap: 'round', strokeLinejoin: 'round' };
+  switch (id) {
+    case 'espresso': // demitasse with handle
+      return <svg {...common}><path d="M6 9h11v6a4 4 0 0 1-4 4H10a4 4 0 0 1-4-4V9z" /><path d="M17 11h2a2 2 0 0 1 0 4h-2" /></svg>;
+    case 'hot-water': // cup with steam
+      return <svg {...common}><path d="M6 11h12v5a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4v-5z" /><path d="M9 5c1 1.5-1 2.5 0 4M15 5c1 1.5-1 2.5 0 4" /></svg>;
+    case 'cold-water': // water drop
+      return <svg {...common}><path d="M12 3 C 12 3, 5.5 10, 5.5 14.5 a 6.5 6.5 0 0 0 13 0 C 18.5 10, 12 3, 12 3 z" /></svg>;
+    case 'steamed-milk': // milk carton with steam
+      return <svg {...common}><path d="M8 9h8v11H8z" /><path d="M9 9V6h6v3" /><path d="M10 3c0 1-1 1-1 2.5M14 3c0 1-1 1-1 2.5" /></svg>;
+    case 'milk-foam': // bubbles
+      return <svg {...common}><circle cx="9" cy="14" r="3" /><circle cx="15" cy="11" r="3.5" /><circle cx="16" cy="17.5" r="2.2" /></svg>;
+    case 'cold-milk': // milk carton, no steam
+      return <svg {...common}><path d="M8 9h8v11H8z" /><path d="M9 9V6h6v3" /><path d="M10.5 13h3" /></svg>;
+    case 'ice': // ice cube with cross facets
+      return <svg {...common}><rect x="5" y="5" width="14" height="14" rx="2" /><path d="M5 9l4 4 4-4M19 9l-4 4M9 13v6" /></svg>;
+    case 'chocolate': // chocolate bar 4 squares
+      return <svg {...common}><rect x="5" y="6" width="14" height="12" /><path d="M12 6v12M5 12h14" /></svg>;
+    case 'vanilla': // vanilla pod
+      return <svg {...common}><path d="M9 3c-2 6 0 12 5 18M9 3c4 2 6 8 5 18" /></svg>;
+    case 'matcha': // tea leaf
+      return <svg {...common}><path d="M5 18c0-7 6-12 13-12 0 7-6 13-13 13z" /><path d="M5 18l8-8" /></svg>;
+    case 'whipped': // dollop / swirl
+      return <svg {...common}><path d="M6 17h12a3.5 3.5 0 0 0 .5-7 5 5 0 0 0-9.5-1A3.5 3.5 0 0 0 6 17z" /><path d="M10 14c1-1 3-1 4 0" /></svg>;
+    default:
+      return null;
+  }
 }
 
 function BlendNavButton({ onClick, label = 'Blend' }) {
@@ -1106,6 +1160,21 @@ function BlendView({ onBack, addEntry, isDesktop }) {
   const removeLayer = (key) => { buzz(5); setCup(c => c.filter(l => l.key !== key)); };
   const clearCup = () => { buzz(6); setCup([]); setLogged(false); };
 
+  const loadRecipe = (recipe) => {
+    buzz([10, 30, 14]);
+    const now = Date.now();
+    const layers = recipe.ing
+      .slice(0, MAX_LAYERS)
+      .map((id, i) => ({
+        key: `${id}-${now}-${i}-${Math.random().toString(36).slice(2, 5)}`,
+        id,
+        ingredient: ING_BY_ID[id],
+      }));
+    setCup(layers);
+    setLogged(false);
+    setRimFlash(f => f + 1);
+  };
+
   const startDrag = (id, e) => {
     if (e.pointerType === 'mouse' && e.button !== 0) return;
     e.preventDefault();
@@ -1150,6 +1219,21 @@ function BlendView({ onBack, addEntry, isDesktop }) {
     setHoverCup(drag.x >= r.left && drag.x <= r.right && drag.y >= r.top && drag.y <= r.bottom);
   }, [drag?.x, drag?.y, drag?.active]);
 
+  // Lock body scroll while a drag is active — prevents the page from
+  // scrolling underneath the user's finger on mobile, which is the single
+  // biggest pain point with touch drag-and-drop.
+  useEffect(() => {
+    if (!drag || !drag.active) return;
+    const prevOverflow = document.body.style.overflow;
+    const prevTouch = document.body.style.touchAction;
+    document.body.style.overflow = 'hidden';
+    document.body.style.touchAction = 'none';
+    return () => {
+      document.body.style.overflow = prevOverflow;
+      document.body.style.touchAction = prevTouch;
+    };
+  }, [drag?.active]);
+
   const logIt = () => {
     if (!matched || !DRINK_BY_ID[matched.drinkId]) return;
     addEntry(matched.drinkId, 1);
@@ -1184,14 +1268,22 @@ function BlendView({ onBack, addEntry, isDesktop }) {
         gap: isDesktop ? 28 : 16,
       }}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16, minWidth: 0 }}>
-          <CupZone
-            ref={cupRef} cup={cup} hot={hot} hoverCup={hoverCup}
-            totalMg={totalMg} totalKcal={totalKcal} rimFlash={rimFlash}
-            removeLayer={removeLayer} clear={clearCup} isDesktop={isDesktop}
-          />
+          <div style={isDesktop ? undefined : {
+            position: 'sticky', top: 0, zIndex: 5,
+            background: T.bg, paddingTop: 8, marginTop: -8,
+          }}>
+            <CupZone
+              ref={cupRef} cup={cup} hot={hot} hoverCup={hoverCup}
+              totalMg={totalMg} totalKcal={totalKcal} rimFlash={rimFlash}
+              removeLayer={removeLayer} clear={clearCup} isDesktop={isDesktop}
+            />
+          </div>
           <ResultPanel cup={cup} matched={matched} totalMg={totalMg} totalKcal={totalKcal} onLog={logIt} logged={logged} isDesktop={isDesktop} />
         </div>
-        <Palette onStartDrag={startDrag} dragId={drag?.id} cupFull={cup.length >= MAX_LAYERS} isDesktop={isDesktop} />
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16, minWidth: 0 }}>
+          <Palette onStartDrag={startDrag} dragId={drag?.id} cupFull={cup.length >= MAX_LAYERS} isDesktop={isDesktop} />
+          <RecipePanel onLoad={loadRecipe} currentKey={idsKey ? blendKey(ids) : ''} isDesktop={isDesktop} />
+        </div>
       </div>
 
       {drag && drag.active && (
@@ -1210,8 +1302,8 @@ function BlendView({ onBack, addEntry, isDesktop }) {
 }
 
 const CupZone = React.forwardRef(function CupZone({ cup, hot, hoverCup, totalMg, totalKcal, rimFlash, removeLayer, clear, isDesktop }, ref) {
-  const CUP_W = isDesktop ? 240 : 196;
-  const CUP_H = isDesktop ? 320 : 260;
+  const CUP_W = isDesktop ? 240 : 160;
+  const CUP_H = isDesktop ? 320 : 200;
   return (
     <Card padding={isDesktop ? 24 : 18}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
@@ -1221,7 +1313,7 @@ const CupZone = React.forwardRef(function CupZone({ cup, hot, hoverCup, totalMg,
         )}
       </div>
 
-      <div style={{ display: 'flex', justifyContent: 'center', position: 'relative', padding: '24px 0 8px' }}>
+      <div style={{ display: 'flex', justifyContent: 'center', position: 'relative', padding: isDesktop ? '24px 0 8px' : '12px 0 4px' }}>
         <div aria-hidden style={{
           position: 'absolute', left: '50%', top: '55%',
           width: CUP_W + 90, height: CUP_H + 70, transform: 'translate(-50%, -50%)',
@@ -1373,6 +1465,7 @@ function Palette({ onStartDrag, dragId, cupFull, isDesktop }) {
                   onPointerDown={(e) => onStartDrag(ing.id, e)}
                   isBeingDragged={dragId === ing.id}
                   disabled={cupFull}
+                  isDesktop={isDesktop}
                 />
               ))}
             </div>
@@ -1383,12 +1476,13 @@ function Palette({ onStartDrag, dragId, cupFull, isDesktop }) {
   );
 }
 
-function IngredientCard({ ing, onPointerDown, isBeingDragged, dragging, disabled }) {
+function IngredientCard({ ing, onPointerDown, isBeingDragged, dragging, disabled, isDesktop }) {
+  const compact = isDesktop || dragging;
   return (
     <div
       onPointerDown={disabled ? undefined : onPointerDown}
       style={{
-        position: 'relative', padding: '12px 12px',
+        position: 'relative', padding: compact ? '12px 12px' : '14px 12px',
         background: dragging ? T.sheetBg : 'transparent',
         border: T.cardBorder, borderRadius: T.radius,
         cursor: disabled ? 'not-allowed' : (dragging ? 'grabbing' : 'grab'),
@@ -1396,13 +1490,18 @@ function IngredientCard({ ing, onPointerDown, isBeingDragged, dragging, disabled
         opacity: isBeingDragged ? 0.35 : disabled ? 0.4 : 1,
         transition: 'opacity 0.15s',
         display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'flex-start',
+        minHeight: compact ? 'auto' : 92,
       }}
     >
       <div aria-hidden style={{
-        width: '100%', height: 26, borderRadius: 2,
+        width: '100%', height: compact ? 34 : 40, borderRadius: 2,
         background: `linear-gradient(180deg, ${ing.accent}, ${ing.color})`,
         boxShadow: `inset 0 1px 0 ${alpha(ing.shimmer, 55)}, inset 0 -3px 6px rgba(0,0,0,0.12)`,
-      }} />
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        color: ingredientIconStroke(ing),
+      }}>
+        <IngredientIcon id={ing.id} size={18} />
+      </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 2, width: '100%' }}>
         <span style={{ fontFamily: T.fontBody, fontSize: 13, color: T.fg, fontWeight: 500 }}>{ing.name}</span>
         <span style={{ fontFamily: T.fontMono, fontSize: 9.5, color: T.muted, letterSpacing: '0.04em' }}>
@@ -1410,6 +1509,74 @@ function IngredientCard({ ing, onPointerDown, isBeingDragged, dragging, disabled
         </span>
       </div>
     </div>
+  );
+}
+
+function RecipePanel({ onLoad, currentKey, isDesktop }) {
+  return (
+    <Card padding={isDesktop ? 24 : 18}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, gap: 10 }}>
+        <div style={{ fontFamily: T.fontMono, fontSize: 10, letterSpacing: '0.16em', textTransform: 'uppercase', color: T.muted, fontWeight: 500 }}>Recipes</div>
+        <span style={{ fontFamily: T.fontMono, fontSize: 10, color: T.muted, letterSpacing: '0.04em', whiteSpace: 'nowrap' }}>
+          {RECIPES.length} known · tap to load
+        </span>
+      </div>
+      <div style={{
+        display: 'flex', flexDirection: 'column', gap: 2,
+        maxHeight: isDesktop ? 460 : 340,
+        overflowY: 'auto', marginRight: -6, paddingRight: 6,
+      }}>
+        {RECIPES.map(r => (
+          <RecipeRow key={r.name} recipe={r} isCurrent={currentKey === blendKey(r.ing)} onLoad={() => onLoad(r)} />
+        ))}
+      </div>
+    </Card>
+  );
+}
+
+function RecipeRow({ recipe, onLoad, isCurrent }) {
+  const [hover, setHover] = useState(false);
+  const totalMg = recipe.ing.reduce((s, id) => s + ((ING_BY_ID[id] && ING_BY_ID[id].mg) || 0), 0);
+  return (
+    <button
+      onClick={onLoad}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      title={recipe.tagline}
+      style={{
+        display: 'flex', alignItems: 'center', gap: 10,
+        padding: '8px 10px',
+        background: isCurrent ? 'var(--accent-tint)' : hover ? T.track : 'transparent',
+        border: 'none',
+        borderLeft: isCurrent ? `2px solid ${T.accent}` : '2px solid transparent',
+        borderRadius: T.radius, cursor: 'pointer',
+        textAlign: 'left', transition: 'background 0.15s, border-color 0.15s',
+      }}
+    >
+      <span aria-hidden style={{ display: 'inline-flex', flexShrink: 0, gap: 2 }}>
+        {recipe.ing.map((id, i) => {
+          const ing = ING_BY_ID[id];
+          if (!ing) return null;
+          return (
+            <span key={i} style={{
+              width: 18, height: 18, borderRadius: 2,
+              background: `linear-gradient(180deg, ${ing.accent}, ${ing.color})`,
+              boxShadow: `inset 0 1px 0 ${alpha(ing.shimmer, 55)}, inset 0 -2px 4px rgba(0,0,0,0.18)`,
+              color: ingredientIconStroke(ing),
+              display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+            }}>
+              <IngredientIcon id={id} size={11} />
+            </span>
+          );
+        })}
+      </span>
+      <span style={{ flex: 1, minWidth: 0, fontFamily: T.fontBody, fontSize: 13, fontWeight: 500, color: T.fg, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+        {recipe.name}
+      </span>
+      <span style={{ fontFamily: T.fontMono, fontSize: 10, color: T.muted, letterSpacing: '0.04em', whiteSpace: 'nowrap' }}>
+        {totalMg} mg
+      </span>
+    </button>
   );
 }
 
@@ -1531,17 +1698,17 @@ function MobileApp({ entries, addEntry, removeEntry, updateEntryTime, waters, ad
   const overColor = total < 300 ? T.ok : total < 400 ? T.warn : T.danger;
 
   return (
-    <div className="kaffe-mobile" style={{ maxWidth: 480, margin: '0 auto', padding: '24px 18px 60px', display: 'flex', flexDirection: 'column', gap: 16 }}>
-      <div style={{ paddingTop: 6, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
-        <div>
-          <div style={{ fontFamily: T.fontMono, fontSize: 10, letterSpacing: '0.18em', textTransform: 'uppercase', color: T.muted, marginBottom: 4 }}>{greeting.toUpperCase()}</div>
-          <div style={{ fontFamily: T.fontDisplay, fontSize: 30, lineHeight: 1.05, color: T.fg, fontWeight: T.displayWeight, letterSpacing: T.displayTracking }}>Today</div>
-        </div>
-        <span style={{ display: 'inline-flex', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-          <BlendNavButton onClick={() => setView('blend')} label="Blend" />
+    <div className="kaffe-mobile" style={{ maxWidth: 480, margin: '0 auto', padding: '20px 18px 60px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
+        <KaffeWordmark size={16} onClick={() => setView('blend')} />
+        <span style={{ display: 'inline-flex', gap: 6 }}>
           <SoundToggle />
           <ThemeToggle />
         </span>
+      </div>
+      <div>
+        <div style={{ fontFamily: T.fontMono, fontSize: 10, letterSpacing: '0.18em', textTransform: 'uppercase', color: T.muted, marginBottom: 4 }}>{greeting.toUpperCase()}</div>
+        <div style={{ fontFamily: T.fontDisplay, fontSize: 30, lineHeight: 1.05, color: T.fg, fontWeight: T.displayWeight, letterSpacing: T.displayTracking }}>Today</div>
       </div>
 
       <Card padding={16}>
@@ -1808,8 +1975,8 @@ function HeroGraph({ entries, now }) {
   const safeAt = timeBelow(entries, 50, now);
   const pctOfLimit = Math.round((total / 400) * 100);
   return (
-    <div style={{ background: T.card, border: T.cardBorder, borderRadius: T.radius, padding: 28 }}>
-      <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr 1fr 1fr', gap: 28, marginBottom: 24 }}>
+    <div style={{ background: T.card, border: T.cardBorder, borderRadius: T.radius, padding: 22 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16, marginBottom: 22 }}>
         <StatBlock label="Today's intake" value={total} unit={`of 400 mg · ${pctOfLimit}%`} big over={total > 400} />
         <StatBlock label="Active in body" value={active} unit="mg right now" live />
         <StatBlock label="Sleep-safe at" value={safeAt ? fmtTime(safeAt) : '—'} unit="under 50 mg" numeric={false} />
@@ -1951,7 +2118,7 @@ function StatsStrip({ entries }) {
   return (
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16 }}>
       {stats.map((s, i) => (
-        <div key={i} style={{ background: T.card, border: T.cardBorder, borderRadius: T.radius, padding: 20 }}>
+        <div key={i} style={{ background: T.card, border: T.cardBorder, borderRadius: T.radius, padding: 22 }}>
           <DLabel>{s.label}</DLabel>
           <div style={{ fontFamily: T.fontDisplay, fontSize: 32, color: T.fg, fontWeight: T.displayWeight, marginTop: 8, lineHeight: 1 }}>
             {s.value}{s.unit && <span style={{ fontFamily: T.fontMono, fontSize: 12, color: T.muted, marginLeft: 6 }}>{s.unit}</span>}
@@ -2248,7 +2415,6 @@ function DesktopApp({ entries, addEntry, removeEntry, updateEntryTime, waters, a
             <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
               <HydroCard waters={waters} addWater={addWater} />
               <QuickLogDesktop onPick={setPendingDrink} onBrowse={() => setBrowseOpen(true)} columns={2} />
-              <ThisWeekCard entries={entries} />
               <SleepCard entries={entries} now={now} />
             </div>
           </div>

@@ -8,7 +8,7 @@
 //   - skipWaiting + clients.claim so a new SW takes over immediately.
 // Bump CACHE_VERSION to force-clear old caches.
 
-const CACHE_VERSION = 'v7';
+const CACHE_VERSION = 'v9';
 const CACHE_NAME = `kaffe-${CACHE_VERSION}`;
 
 const PRECACHE_URLS = [
