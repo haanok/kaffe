@@ -256,12 +256,59 @@ function makeMonthHistory() {
   ];
 }
 
-// ── Haptics (mobile only) ──────────────────────────────────────────────────
-// No-op when the API is missing or the device ignores it (most desktops).
+// ── Tick feedback (Web Audio synth, mobile-friendly) ──────────────────────
+// Web Vibration API isn't supported on iOS, so we render a short percussive
+// "tick" via the Web Audio API instead. iOS respects the silent switch for
+// Web Audio, so users in silent mode still get the tactile-feeling silence.
+const SOUND_KEY = 'kaffe-sound';
+let _audioCtx = null;
+function getAudioCtx() {
+  if (_audioCtx) return _audioCtx;
+  try {
+    const Ctx = window.AudioContext || window.webkitAudioContext;
+    if (!Ctx) return null;
+    _audioCtx = new Ctx();
+    return _audioCtx;
+  } catch { return null; }
+}
+function playTick(intensity = 8) {
+  const ctx = getAudioCtx();
+  if (!ctx) return;
+  if (ctx.state === 'suspended') { try { ctx.resume(); } catch {} }
+  const now = ctx.currentTime;
+  // Intensity maps to volume / pitch / decay (typical range 4–20).
+  const vol = Math.min(0.16, 0.03 + intensity * 0.006);
+  const freq = intensity <= 5 ? 2400 : intensity <= 10 ? 1800 : 1300;
+  const decay = 0.022 + intensity * 0.0025;
+  const osc = ctx.createOscillator();
+  const gain = ctx.createGain();
+  osc.type = 'triangle';
+  osc.frequency.setValueAtTime(freq, now);
+  osc.frequency.exponentialRampToValueAtTime(freq * 0.55, now + decay);
+  gain.gain.setValueAtTime(0, now);
+  gain.gain.linearRampToValueAtTime(vol, now + 0.0015);
+  gain.gain.exponentialRampToValueAtTime(0.0001, now + decay);
+  osc.connect(gain);
+  gain.connect(ctx.destination);
+  osc.start(now);
+  osc.stop(now + decay + 0.02);
+}
+// Backwards-compatible name — call sites still say buzz(...). A number plays
+// one tick; an array [on, off, on, off, ...] plays a tick at the start of
+// each "on" segment, with the off-gaps used as inter-tick delays.
 function buzz(pattern = 8) {
   try {
-    if (typeof navigator !== 'undefined' && navigator.vibrate) {
-      navigator.vibrate(pattern);
+    if (typeof localStorage !== 'undefined' && localStorage.getItem(SOUND_KEY) === 'off') return;
+    if (Array.isArray(pattern)) {
+      let t = 0;
+      for (let i = 0; i < pattern.length; i += 2) {
+        const intensity = pattern[i];
+        if (t === 0) playTick(intensity);
+        else setTimeout(() => playTick(intensity), t);
+        t += pattern[i] + (pattern[i + 1] || 0);
+      }
+    } else {
+      playTick(pattern);
     }
   } catch {}
 }
@@ -345,6 +392,54 @@ function useTheme() {
   }, [theme]);
   const toggle = useCallback(() => setTheme(t => t === 'dark' ? 'light' : 'dark'), []);
   return [theme, toggle];
+}
+
+function useSound() {
+  const [on, setOn] = useState(() => {
+    try { return localStorage.getItem(SOUND_KEY) !== 'off'; } catch { return true; }
+  });
+  useEffect(() => {
+    try { localStorage.setItem(SOUND_KEY, on ? 'on' : 'off'); } catch {}
+  }, [on]);
+  const toggle = useCallback(() => setOn(v => !v), []);
+  return [on, toggle];
+}
+
+function SoundToggle({ size = 18 }) {
+  const [on, toggle] = useSound();
+  const handle = () => {
+    // Tick when turning on (so the user hears the new state); silence when turning off.
+    if (!on) { playTick(8); }
+    toggle();
+  };
+  return (
+    <button
+      onClick={handle}
+      aria-label={on ? 'Mute tick sounds' : 'Enable tick sounds'}
+      title={on ? 'Mute tick sounds' : 'Enable tick sounds'}
+      style={{
+        width: size + 18, height: size + 18,
+        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+        background: 'transparent', border: T.cardBorder, borderRadius: T.radius,
+        cursor: 'pointer', color: T.muted, padding: 0,
+        transition: 'color 0.2s ease, border-color 0.2s ease',
+      }}
+      onMouseEnter={e => { e.currentTarget.style.color = T.fg; }}
+      onMouseLeave={e => { e.currentTarget.style.color = T.muted; }}
+    >
+      {on ? (
+        <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M5 9v6h3l5 4V5L8 9H5z" />
+          <path d="M16 8a5 5 0 0 1 0 8" />
+        </svg>
+      ) : (
+        <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M5 9v6h3l5 4V5L8 9H5z" />
+          <path d="M16 9l5 5M21 9l-5 5" />
+        </svg>
+      )}
+    </button>
+  );
 }
 
 function ThemeToggle({ size = 18 }) {
@@ -927,7 +1022,7 @@ function MobileApp({ entries, addEntry, removeEntry, updateEntryTime, waters, ad
           <div style={{ fontFamily: T.fontMono, fontSize: 10, letterSpacing: '0.18em', textTransform: 'uppercase', color: T.muted, marginBottom: 4 }}>{greeting.toUpperCase()}</div>
           <div style={{ fontFamily: T.fontDisplay, fontSize: 30, lineHeight: 1.05, color: T.fg, fontWeight: T.displayWeight, letterSpacing: T.displayTracking }}>Today</div>
         </div>
-        <ThemeToggle />
+        <span style={{ display: 'inline-flex', gap: 6 }}><SoundToggle /><ThemeToggle /></span>
       </div>
 
       <Card padding={16}>
@@ -1107,7 +1202,7 @@ function TopNav({ tab, onTab, now }) {
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 18 }}>
         <span style={{ fontFamily: T.fontMono, fontSize: 12, color: T.muted, letterSpacing: '0.04em' }}>{dateStr}</span>
-        <ThemeToggle />
+        <span style={{ display: 'inline-flex', gap: 6 }}><SoundToggle /><ThemeToggle /></span>
       </div>
     </div>
   );
