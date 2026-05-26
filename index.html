@@ -28,6 +28,35 @@
       70%  { box-shadow: 0 0 0 10px transparent; }
       100% { box-shadow: 0 0 0 0 transparent; }
     }
+    @keyframes kaffeWaterRise {
+      0%   { height: 0%; }
+      100% { height: 100%; }
+    }
+    @keyframes kaffeWaterDrain {
+      0%   { height: 100%; opacity: 1; }
+      100% { height: 0%; opacity: 0.6; }
+    }
+    @keyframes kaffeWaterWobble {
+      0%   { transform: translateX(-12px); }
+      50%  { transform: translateX(12px); }
+      100% { transform: translateX(-12px); }
+    }
+    @keyframes kaffeDroplet {
+      0%   { transform: translate(0, 0) scale(0.6); opacity: 0; }
+      15%  { opacity: 1; transform: translate(calc(var(--dx) * 0.2), calc(var(--peak) * 0.4)) scale(1); }
+      55%  { transform: translate(calc(var(--dx) * 0.65), var(--peak)) scale(1); opacity: 1; }
+      100% { transform: translate(var(--dx), var(--dy)) scale(0.7); opacity: 0; }
+    }
+    @keyframes kaffePointPulse {
+      0%   { transform: scale(1); }
+      40%  { transform: scale(1.22); }
+      100% { transform: scale(1); }
+    }
+    @keyframes kaffeShine {
+      0%   { opacity: 0; transform: translateY(8px); }
+      30%  { opacity: 1; }
+      100% { opacity: 0; transform: translateY(-2px); }
+    }
     input[type="range"] { -webkit-appearance: none; height: 26px; background: transparent; width: 100%; }
     input[type="range"]::-webkit-slider-runnable-track { height: 3px; border-radius: 1px; background: rgba(220,209,187,0.10); }
     input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 16px; height: 16px; border-radius: 50%; background: #a37a4f; margin-top: -6px; border: 2px solid #13110e; box-shadow: 0 2px 8px rgba(0,0,0,0.4); cursor: pointer; }
@@ -55,6 +84,8 @@ const T = {
   warn: '#b89260',
   danger: '#b6604a',
   ok: '#869b6b',
+  water: '#7ec4d6',
+  bonus: '#d4a574',
   card: 'transparent',
   cardBorder: '1px solid rgba(220,209,187,0.11)',
   divider: '1px solid rgba(220,209,187,0.09)',
@@ -161,6 +192,7 @@ function makeMonthHistory() {
 
 // ── Storage ────────────────────────────────────────────────────────────────
 const STORE_KEY = 'kaffe-log-v1';
+const WATER_KEY = 'kaffe-water-log-v1';
 function todayKey() { return new Date().toISOString().slice(0, 10); }
 function loadEntries() {
   try {
@@ -172,6 +204,20 @@ function loadEntries() {
 }
 function saveEntries(entries) {
   localStorage.setItem(STORE_KEY, JSON.stringify({ date: todayKey(), entries }));
+}
+function loadWaters() {
+  try {
+    const raw = localStorage.getItem(WATER_KEY);
+    if (!raw) return [];
+    const { date, waters } = JSON.parse(raw);
+    return date === todayKey() ? waters : [];
+  } catch { return []; }
+}
+function saveWaters(waters) {
+  localStorage.setItem(WATER_KEY, JSON.stringify({ date: todayKey(), waters }));
+}
+function hydroPoints(waters) {
+  return waters.reduce((s, w) => s + 1 + (w.bonus ? 1 : 0), 0);
 }
 
 // ── Hooks ──────────────────────────────────────────────────────────────────
@@ -222,6 +268,15 @@ function DrinkGlyph({ cat, size = 20 }) {
     case 'sweets': return <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><rect x="5" y="5" width="14" height="14" rx="2"/><path d="M5 9h14M5 13h14M9 5v14M13 5v14"/></svg>;
     default: return null;
   }
+}
+function WaterDropGlyph({ size = 20 }) {
+  const s = size, c = 'currentColor';
+  return (
+    <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 3.2 C 12 3.2, 5.5 10.5, 5.5 15 a 6.5 6.5 0 0 0 13 0 C 18.5 10.5, 12 3.2, 12 3.2 z" />
+      <path d="M9 14.5 a 3 3 0 0 0 1.5 2.5" strokeOpacity="0.55" />
+    </svg>
+  );
 }
 
 // ── Decay curve ────────────────────────────────────────────────────────────
@@ -500,9 +555,221 @@ function AmountPicker({ open, drinkId, onClose, onConfirm, isDesktop }) {
 }
 
 // ══════════════════════════════════════════════════════════════════════════
+// HYDRO — water glasses + reward animation
+// ══════════════════════════════════════════════════════════════════════════
+function HydroCard({ waters, addWater }) {
+  const [phase, setPhase] = useState('idle'); // idle | filling | bursting | draining
+  const [droplets, setDroplets] = useState([]);
+  const [pendingBonus, setPendingBonus] = useState(false);
+  const [displayPoints, setDisplayPoints] = useState(() => hydroPoints(waters));
+  const [pulseKey, setPulseKey] = useState(0);
+  const timers = useRef([]);
+
+  const points = hydroPoints(waters);
+  const glasses = waters.length;
+  const bonusCount = waters.filter(w => w.bonus).length;
+
+  useEffect(() => {
+    // keep counter in sync when waters change from outside (e.g., removal)
+    if (phase === 'idle') setDisplayPoints(points);
+  }, [points, phase]);
+
+  useEffect(() => () => { timers.current.forEach(clearTimeout); }, []);
+
+  const schedule = (fn, ms) => {
+    const id = setTimeout(fn, ms);
+    timers.current.push(id);
+  };
+
+  const handleClick = () => {
+    if (phase !== 'idle') return;
+    const rec = addWater();
+    const bonus = !!(rec && rec.bonus);
+    setPendingBonus(bonus);
+    setPhase('filling');
+
+    const dropCount = bonus ? 12 : 8;
+    const drops = Array.from({ length: dropCount }, (_, i) => {
+      const angle = (Math.PI * (0.15 + 0.7 * (i / Math.max(dropCount - 1, 1)))) - Math.PI * 0.075;
+      const speed = 70 + Math.random() * 55;
+      const dx = Math.cos(angle) * speed * (Math.random() < 0.5 ? -1 : 1);
+      const dy = 90 + Math.random() * 70;
+      const peak = -(40 + Math.random() * 30);
+      const size = 5 + Math.random() * 5;
+      return {
+        id: 'd' + Date.now() + '-' + i,
+        dx: `${dx.toFixed(1)}px`,
+        dy: `${dy.toFixed(1)}px`,
+        peak: `${peak.toFixed(1)}px`,
+        size,
+        delay: Math.random() * 180,
+        bonus,
+      };
+    });
+
+    schedule(() => {
+      setPhase('bursting');
+      setDroplets(drops);
+    }, 380);
+
+    schedule(() => {
+      setDisplayPoints(p => p + (bonus ? 2 : 1));
+      setPulseKey(k => k + 1);
+    }, 880);
+
+    schedule(() => setPhase('draining'), 1120);
+    schedule(() => { setPhase('idle'); setDroplets([]); }, 1600);
+  };
+
+  const fillHeight = phase === 'filling' || phase === 'bursting' ? '100%' : '0%';
+  const fillTransition = phase === 'filling' ? 'height 600ms cubic-bezier(0.22, 1, 0.36, 1)'
+    : phase === 'draining' ? 'height 460ms cubic-bezier(0.55, 0, 0.7, 0.2), opacity 460ms ease-out'
+    : 'none';
+  const fillOpacity = phase === 'draining' ? 0.45 : 1;
+
+  return (
+    <Card padding={16}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10 }}>
+        <div style={{ fontFamily: T.fontMono, fontSize: 10, letterSpacing: '0.18em', textTransform: 'uppercase', color: T.muted, fontWeight: 500 }}>Hydro</div>
+        {bonusCount > 0 && (
+          <div style={{ fontFamily: T.fontMono, fontSize: 9.5, letterSpacing: '0.14em', textTransform: 'uppercase', color: T.bonus, fontWeight: 600 }}>
+            {bonusCount} bonus
+          </div>
+        )}
+      </div>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 4 }}>
+        <span
+          key={pulseKey}
+          style={{
+            display: 'inline-block',
+            fontFamily: T.fontDisplay,
+            fontSize: 44,
+            lineHeight: 1,
+            color: pendingBonus && phase !== 'idle' ? T.bonus : T.water,
+            fontWeight: T.displayWeight,
+            letterSpacing: T.displayTracking,
+            fontFeatureSettings: '"tnum"',
+            transition: 'color 0.3s ease',
+            animation: pulseKey > 0 ? 'kaffePointPulse 420ms cubic-bezier(0.34, 1.56, 0.64, 1)' : 'none',
+            transformOrigin: 'left center',
+          }}
+        >{displayPoints}</span>
+        <span style={{ fontFamily: T.fontMono, fontSize: 10, color: T.muted, letterSpacing: '0.06em' }}>
+          {displayPoints === 1 ? 'point' : 'points'}
+        </span>
+      </div>
+      <div style={{ fontFamily: T.fontBody, fontSize: 12.5, color: T.muted, marginBottom: 14 }}>
+        {glasses === 0
+          ? "No glasses yet. Sip something to start."
+          : `${glasses} ${glasses === 1 ? 'glass' : 'glasses'} today${bonusCount > 0 ? ` · +${bonusCount} bonus` : ''}`}
+      </div>
+
+      <button
+        onClick={handleClick}
+        disabled={phase !== 'idle'}
+        style={{
+          position: 'relative',
+          overflow: 'hidden',
+          width: '100%',
+          padding: '14px 16px',
+          background: T.track,
+          border: `1px solid ${T.water}55`,
+          borderRadius: T.radius,
+          cursor: phase === 'idle' ? 'pointer' : 'default',
+          color: T.fg,
+          fontFamily: T.fontBody,
+          fontSize: 14,
+          fontWeight: 500,
+          letterSpacing: '0.01em',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: 10,
+          minHeight: 52,
+          transition: 'border-color 0.2s ease, transform 0.1s',
+        }}
+        onMouseDown={e => { if (phase === 'idle') e.currentTarget.style.transform = 'scale(0.985)'; }}
+        onMouseUp={e => e.currentTarget.style.transform = 'scale(1)'}
+        onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}
+      >
+        {/* Water fill layer */}
+        <div
+          aria-hidden
+          style={{
+            position: 'absolute',
+            left: 0, right: 0, bottom: 0,
+            height: fillHeight,
+            background: pendingBonus
+              ? `linear-gradient(180deg, ${T.bonus}66 0%, ${T.water}88 30%, ${T.water}cc 100%)`
+              : `linear-gradient(180deg, ${T.water}55 0%, ${T.water}88 30%, ${T.water}cc 100%)`,
+            transition: fillTransition,
+            opacity: fillOpacity,
+            pointerEvents: 'none',
+            zIndex: 0,
+          }}
+        />
+        {/* Water surface ripple */}
+        {(phase === 'filling' || phase === 'bursting') && (
+          <div
+            aria-hidden
+            style={{
+              position: 'absolute',
+              left: 0, right: 0,
+              bottom: 'calc(100% - 4px)',
+              height: 0,
+              pointerEvents: 'none',
+              zIndex: 1,
+            }}
+          >
+            <div style={{
+              position: 'absolute', left: 0, right: 0, top: -3, height: 6,
+              background: `linear-gradient(180deg, transparent, ${T.water})`,
+              opacity: 0.7,
+              animation: 'kaffeWaterWobble 1.4s ease-in-out infinite',
+              borderRadius: '50%',
+              transform: 'translateX(-12px)',
+            }} />
+          </div>
+        )}
+        {/* Droplet burst layer */}
+        <div aria-hidden style={{ position: 'absolute', left: '50%', top: '50%', width: 0, height: 0, pointerEvents: 'none', zIndex: 2 }}>
+          {droplets.map(d => (
+            <div
+              key={d.id}
+              style={{
+                position: 'absolute',
+                left: -d.size / 2,
+                top: -d.size / 2,
+                width: d.size,
+                height: d.size,
+                borderRadius: '50% 50% 50% 50% / 60% 60% 40% 40%',
+                background: d.bonus ? T.bonus : T.water,
+                boxShadow: `0 0 8px ${d.bonus ? T.bonus : T.water}88`,
+                opacity: 0,
+                ['--dx']: d.dx,
+                ['--dy']: d.dy,
+                ['--peak']: d.peak,
+                animation: `kaffeDroplet 950ms cubic-bezier(0.22, 0.61, 0.36, 1) ${d.delay}ms forwards`,
+              }}
+            />
+          ))}
+        </div>
+        {/* Button label */}
+        <span style={{ position: 'relative', zIndex: 3, display: 'flex', alignItems: 'center', gap: 10, color: T.fg, mixBlendMode: 'normal' }}>
+          <span style={{ color: T.water, display: 'inline-flex' }}>
+            <WaterDropGlyph size={18} />
+          </span>
+          {phase === 'idle' ? 'Add glass of water' : pendingBonus ? '+2 bonus!' : '+1 point'}
+        </span>
+      </button>
+    </Card>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════════════════
 // MOBILE LAYOUT
 // ══════════════════════════════════════════════════════════════════════════
-function MobileApp({ entries, addEntry, removeEntry, updateEntryTime, now, setBrowseOpen, setPendingDrink }) {
+function MobileApp({ entries, addEntry, removeEntry, updateEntryTime, waters, addWater, removeWater, updateWaterTime, now, setBrowseOpen, setPendingDrink }) {
   const [width, setWidth] = useState(Math.min(window.innerWidth, 480));
   useEffect(() => {
     const onResize = () => setWidth(Math.min(window.innerWidth, 480));
@@ -578,6 +845,8 @@ function MobileApp({ entries, addEntry, removeEntry, updateEntryTime, now, setBr
         </Card>
       </div>
 
+      <HydroCard waters={waters} addWater={addWater} />
+
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0 4px' }}>
           <div style={{ fontFamily: T.fontMono, fontSize: 10, letterSpacing: '0.14em', textTransform: 'uppercase', color: T.muted, fontWeight: 500 }}>Quick log</div>
@@ -605,37 +874,67 @@ function MobileApp({ entries, addEntry, removeEntry, updateEntryTime, now, setBr
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
         <div style={{ padding: '0 4px', fontFamily: T.fontMono, fontSize: 10, letterSpacing: '0.14em', textTransform: 'uppercase', color: T.muted, fontWeight: 500 }}>Today's log</div>
-        {entries.length === 0 ? (
+        {entries.length === 0 && waters.length === 0 ? (
           <Card padding={20} style={{ textAlign: 'center' }}>
             <span style={{ fontFamily: T.fontBody, fontSize: 13, color: T.muted }}>Nothing logged yet today.</span>
           </Card>
         ) : (
           <Card padding={0}>
-            {entries.slice().sort((a, b) => b.time - a.time).map((e, i, arr) => {
-              const d = DRINK_BY_ID[e.drink];
-              const t = new Date(e.time);
+            {[
+              ...entries.map(e => ({ ...e, _kind: 'coffee' })),
+              ...waters.map(w => ({ ...w, _kind: 'water' })),
+            ].sort((a, b) => b.time - a.time).map((row, i, arr) => {
+              const t = new Date(row.time);
               const timeVal = `${t.getHours().toString().padStart(2,'0')}:${t.getMinutes().toString().padStart(2,'0')}`;
+              const isWater = row._kind === 'water';
+              if (isWater) {
+                const iconColor = row.bonus ? T.bonus : T.water;
+                return (
+                  <div key={row.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', borderBottom: i < arr.length - 1 ? T.divider : 'none' }}>
+                    <div style={{ width: 36, height: 36, borderRadius: T.radius, border: `1px solid ${iconColor}40`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: iconColor, flexShrink: 0 }}><WaterDropGlyph /></div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontFamily: T.fontBody, fontSize: 13, fontWeight: 500, color: T.fg, marginBottom: 4, display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <span>Water</span>
+                        <span style={{ fontFamily: T.fontMono, fontSize: 10, color: iconColor, border: `1px solid ${iconColor}55`, padding: '0 5px', borderRadius: T.radius, letterSpacing: '0.04em' }}>{row.bonus ? '+2 BONUS' : '+1'}</span>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <input
+                          type="time"
+                          value={timeVal}
+                          onChange={ev => updateWaterTime(row.id, ev.target.value)}
+                          style={{ fontFamily: T.fontMono, fontSize: 10, color: iconColor, background: T.track, border: 'none', borderRadius: T.radius, padding: '2px 6px', cursor: 'pointer', letterSpacing: '0.04em', outline: 'none', width: 72 }}
+                        />
+                        <span style={{ fontFamily: T.fontMono, fontSize: 10, color: T.muted, letterSpacing: '0.04em' }}>1 glass</span>
+                      </div>
+                    </div>
+                    <button onClick={() => removeWater(row.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: T.muted, padding: 6 }}>
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg>
+                    </button>
+                  </div>
+                );
+              }
+              const d = DRINK_BY_ID[row.drink];
               return (
-                <div key={e.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', borderBottom: i < arr.length - 1 ? T.divider : 'none' }}>
+                <div key={row.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', borderBottom: i < arr.length - 1 ? T.divider : 'none' }}>
                   <div style={{ width: 36, height: 36, borderRadius: T.radius, border: T.cardBorder, display: 'flex', alignItems: 'center', justifyContent: 'center', color: T.accent, flexShrink: 0 }}><DrinkGlyph cat={d.cat} /></div>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontFamily: T.fontBody, fontSize: 13, fontWeight: 500, color: T.fg, marginBottom: 4, display: 'flex', alignItems: 'center', gap: 6 }}>
                       <span>{d.name}</span>
-                      {e.amount && Math.abs(e.amount - 1) > 0.001 && (
-                        <span style={{ fontFamily: T.fontMono, fontSize: 10, color: T.accent, border: `1px solid ${T.accent}55`, padding: '0 5px', borderRadius: T.radius, letterSpacing: '0.04em' }}>{portionLabel(e.amount)}×</span>
+                      {row.amount && Math.abs(row.amount - 1) > 0.001 && (
+                        <span style={{ fontFamily: T.fontMono, fontSize: 10, color: T.accent, border: `1px solid ${T.accent}55`, padding: '0 5px', borderRadius: T.radius, letterSpacing: '0.04em' }}>{portionLabel(row.amount)}×</span>
                       )}
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                       <input
                         type="time"
                         value={timeVal}
-                        onChange={ev => updateEntryTime(e.id, ev.target.value)}
+                        onChange={ev => updateEntryTime(row.id, ev.target.value)}
                         style={{ fontFamily: T.fontMono, fontSize: 10, color: T.accent, background: T.track, border: 'none', borderRadius: T.radius, padding: '2px 6px', cursor: 'pointer', letterSpacing: '0.04em', outline: 'none', width: 72 }}
                       />
-                      <span style={{ fontFamily: T.fontMono, fontSize: 10, color: T.muted, letterSpacing: '0.04em' }}>{e.mg} mg · {e.kcal} kcal</span>
+                      <span style={{ fontFamily: T.fontMono, fontSize: 10, color: T.muted, letterSpacing: '0.04em' }}>{row.mg} mg · {row.kcal} kcal</span>
                     </div>
                   </div>
-                  <button onClick={() => removeEntry(e.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: T.muted, padding: 6 }}>
+                  <button onClick={() => removeEntry(row.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: T.muted, padding: 6 }}>
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg>
                   </button>
                 </div>
@@ -771,36 +1070,68 @@ function QuickLogDesktop({ onPick, onBrowse, columns = 2 }) {
   );
 }
 
-function TodayLogDesktop({ entries, removeEntry, updateEntryTime }) {
+function TodayLogDesktop({ entries, removeEntry, updateEntryTime, waters, removeWater, updateWaterTime }) {
+  const merged = [
+    ...entries.map(e => ({ ...e, _kind: 'coffee' })),
+    ...(waters || []).map(w => ({ ...w, _kind: 'water' })),
+  ].sort((a, b) => b.time - a.time);
+  const drinkCount = entries.length;
+  const glassCount = (waters || []).length;
+  const summary = [
+    drinkCount > 0 && `${drinkCount} drink${drinkCount === 1 ? '' : 's'}`,
+    glassCount > 0 && `${glassCount} glass${glassCount === 1 ? '' : 'es'}`,
+  ].filter(Boolean).join(' · ') || '0 entries';
   return (
     <div style={{ background: T.card, border: T.cardBorder, borderRadius: T.radius, padding: 0 }}>
       <div style={{ padding: '20px 22px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: T.divider }}>
         <DLabel>Today's log</DLabel>
-        <span style={{ fontFamily: T.fontMono, fontSize: 11, color: T.muted }}>{entries.length} drink{entries.length === 1 ? '' : 's'}</span>
+        <span style={{ fontFamily: T.fontMono, fontSize: 11, color: T.muted }}>{summary}</span>
       </div>
-      {entries.length === 0 ? (
+      {merged.length === 0 ? (
         <div style={{ padding: 32, textAlign: 'center', fontFamily: T.fontBody, fontSize: 13, color: T.muted }}>Nothing logged yet.</div>
-      ) : entries.slice().sort((a, b) => b.time - a.time).map((e, i, arr) => {
-        const d = DRINK_BY_ID[e.drink];
-        const t = new Date(e.time);
+      ) : merged.map((row, i, arr) => {
+        const t = new Date(row.time);
         const timeVal = `${t.getHours().toString().padStart(2,'0')}:${t.getMinutes().toString().padStart(2,'0')}`;
+        if (row._kind === 'water') {
+          const iconColor = row.bonus ? T.bonus : T.water;
+          return (
+            <div key={row.id} style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '14px 22px', borderBottom: i < arr.length - 1 ? T.divider : 'none' }}>
+              <div style={{ color: iconColor, flexShrink: 0 }}><WaterDropGlyph size={22} /></div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontFamily: T.fontBody, fontSize: 13.5, color: T.fg, fontWeight: 500, marginBottom: 4, display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span>Water</span>
+                  <span style={{ fontFamily: T.fontMono, fontSize: 10, color: iconColor, border: `1px solid ${iconColor}55`, padding: '0 5px', borderRadius: T.radius, letterSpacing: '0.04em' }}>{row.bonus ? '+2 BONUS' : '+1'}</span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <input type="time" value={timeVal} onChange={ev => updateWaterTime(row.id, ev.target.value)}
+                    style={{ fontFamily: T.fontMono, fontSize: 11, color: iconColor, background: T.track, border: 'none', borderRadius: T.radius, padding: '2px 8px', cursor: 'pointer', letterSpacing: '0.04em', outline: 'none', width: 84 }} />
+                  <span style={{ fontFamily: T.fontMono, fontSize: 11, color: T.muted, letterSpacing: '0.04em' }}>1 glass</span>
+                </div>
+              </div>
+              <button onClick={() => removeWater(row.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: T.muted, padding: 4 }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg>
+              </button>
+            </div>
+          );
+        }
+        const d = DRINK_BY_ID[row.drink];
         return (
-          <div key={e.id} style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '14px 22px', borderBottom: i < arr.length - 1 ? T.divider : 'none' }}>
+          <div key={row.id} style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '14px 22px', borderBottom: i < arr.length - 1 ? T.divider : 'none' }}>
             <div style={{ color: T.accent, flexShrink: 0 }}><DrinkGlyph cat={d.cat} size={22} /></div>
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontFamily: T.fontBody, fontSize: 13.5, color: T.fg, fontWeight: 500, marginBottom: 4, display: 'flex', alignItems: 'center', gap: 8 }}>
                 <span>{d.name}</span>
-                {e.amount && Math.abs(e.amount - 1) > 0.001 && (
-                  <span style={{ fontFamily: T.fontMono, fontSize: 10, color: T.accent, border: `1px solid ${T.accent}55`, padding: '0 5px', borderRadius: T.radius, letterSpacing: '0.04em' }}>{portionLabel(e.amount)}×</span>
+                {row.amount && Math.abs(row.amount - 1) > 0.001 && (
+                  <span style={{ fontFamily: T.fontMono, fontSize: 10, color: T.accent, border: `1px solid ${T.accent}55`, padding: '0 5px', borderRadius: T.radius, letterSpacing: '0.04em' }}>{portionLabel(row.amount)}×</span>
                 )}
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <input type="time" value={timeVal} onChange={ev => updateEntryTime(e.id, ev.target.value)}
+                <input type="time" value={timeVal} onChange={ev => updateEntryTime(row.id, ev.target.value)}
                   style={{ fontFamily: T.fontMono, fontSize: 11, color: T.accent, background: T.track, border: 'none', borderRadius: T.radius, padding: '2px 8px', cursor: 'pointer', letterSpacing: '0.04em', outline: 'none', width: 84 }} />
-                <span style={{ fontFamily: T.fontMono, fontSize: 11, color: T.muted, letterSpacing: '0.04em' }}>{e.mg} mg · {e.kcal} kcal</span>
+                <span style={{ fontFamily: T.fontMono, fontSize: 11, color: T.muted, letterSpacing: '0.04em' }}>{row.mg} mg · {row.kcal} kcal</span>
               </div>
             </div>
-            <button onClick={() => removeEntry(e.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: T.muted, padding: 4 }}>
+            <button onClick={() => removeEntry(row.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: T.muted, padding: 4 }}>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg>
             </button>
           </div>
@@ -1086,7 +1417,7 @@ function SleepView({ entries, now }) {
   );
 }
 
-function DesktopApp({ entries, addEntry, removeEntry, updateEntryTime, now, setBrowseOpen, setPendingDrink }) {
+function DesktopApp({ entries, addEntry, removeEntry, updateEntryTime, waters, addWater, removeWater, updateWaterTime, now, setBrowseOpen, setPendingDrink }) {
   const [tab, setTab] = useState('today');
   const greeting = (() => {
     const h = new Date(now).getHours();
@@ -1112,10 +1443,11 @@ function DesktopApp({ entries, addEntry, removeEntry, updateEntryTime, now, setB
             <div style={{ display: 'flex', flexDirection: 'column', gap: 24, minWidth: 0 }}>
               <HeroGraph entries={entries} now={now} />
               <CoachBanner entries={entries} />
-              <TodayLogDesktop entries={entries} removeEntry={removeEntry} updateEntryTime={updateEntryTime} />
+              <TodayLogDesktop entries={entries} removeEntry={removeEntry} updateEntryTime={updateEntryTime} waters={waters} removeWater={removeWater} updateWaterTime={updateWaterTime} />
               <StatsStrip entries={entries} />
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+              <HydroCard waters={waters} addWater={addWater} />
               <QuickLogDesktop onPick={setPendingDrink} onBrowse={() => setBrowseOpen(true)} columns={2} />
               <ThisWeekCard entries={entries} />
               <SleepCard entries={entries} now={now} />
@@ -1135,6 +1467,7 @@ function DesktopApp({ entries, addEntry, removeEntry, updateEntryTime, now, setB
 function App() {
   const isDesktop = useIsDesktop();
   const [entries, setEntries] = useState(loadEntries);
+  const [waters, setWaters] = useState(loadWaters);
   const [browseOpen, setBrowseOpen] = useState(false);
   const [pendingDrink, setPendingDrink] = useState(null);
   const now = useLiveNow();
@@ -1154,8 +1487,28 @@ function App() {
     const next = entries.map(e => e.id === id ? { ...e, time: d.getTime() } : e);
     setEntries(next); saveEntries(next);
   };
+  const addWater = () => {
+    const t = Date.now();
+    const lastCoffee = entries.length ? Math.max(...entries.map(e => e.time)) : -Infinity;
+    const lastWater = waters.length ? Math.max(...waters.map(w => w.time)) : -Infinity;
+    const bonus = lastCoffee > lastWater && lastCoffee !== -Infinity;
+    const rec = { id: 'w' + t, time: t, bonus };
+    const next = [...waters, rec];
+    setWaters(next); saveWaters(next);
+    return rec;
+  };
+  const removeWater = id => {
+    const next = waters.filter(w => w.id !== id);
+    setWaters(next); saveWaters(next);
+  };
+  const updateWaterTime = (id, timeStr) => {
+    const [h, m] = timeStr.split(':').map(Number);
+    const d = new Date(); d.setHours(h, m, 0, 0);
+    const next = waters.map(w => w.id === id ? { ...w, time: d.getTime() } : w);
+    setWaters(next); saveWaters(next);
+  };
 
-  const shared = { entries, addEntry, removeEntry, updateEntryTime, now, setBrowseOpen, setPendingDrink };
+  const shared = { entries, addEntry, removeEntry, updateEntryTime, waters, addWater, removeWater, updateWaterTime, now, setBrowseOpen, setPendingDrink };
 
   return (
     <>
