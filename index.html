@@ -108,6 +108,34 @@
       30%  { opacity: 1; }
       100% { opacity: 0; transform: translateY(-2px); }
     }
+    @keyframes kaffeLiquidIn {
+      0%   { transform: translateY(-180%); opacity: 0; }
+      55%  { transform: translateY(7%);   opacity: 1; }
+      80%  { transform: translateY(-2%); }
+      100% { transform: translateY(0);    opacity: 1; }
+    }
+    @keyframes kaffeCupBob {
+      0%, 100% { transform: translateY(0); }
+      50%      { transform: translateY(-3px); }
+    }
+    @keyframes kaffeRise {
+      from { opacity: 0; transform: translateY(16px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes kaffeRimSplash {
+      0%   { opacity: 0; transform: scaleX(0.4); }
+      30%  { opacity: 1; }
+      100% { opacity: 0; transform: scaleX(1.3); }
+    }
+    @keyframes kaffeSteam {
+      0%   { opacity: 0; transform: translateY(8px) scaleY(0.6); }
+      30%  { opacity: 0.55; }
+      100% { opacity: 0; transform: translateY(-26px) scaleY(1.2); }
+    }
+    @keyframes kaffeRingPulse {
+      0%   { box-shadow: 0 0 0 0 var(--accent); opacity: 0.6; }
+      100% { box-shadow: 0 0 0 14px transparent; opacity: 0; }
+    }
     input[type="range"] { -webkit-appearance: none; height: 26px; background: transparent; width: 100%; }
     input[type="range"]::-webkit-slider-runnable-track { height: 3px; border-radius: 1px; background: var(--grid); }
     input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 16px; height: 16px; border-radius: 50%; background: var(--accent); margin-top: -6px; border: 2px solid var(--bg); box-shadow: var(--shadow-soft); cursor: pointer; }
@@ -984,15 +1012,502 @@ function HydroCard({ waters, addWater }) {
 }
 
 // ══════════════════════════════════════════════════════════════════════════
+// BLEND LAB — drag-and-drop coffee blending mini-game
+// ══════════════════════════════════════════════════════════════════════════
+const INGREDIENTS = [
+  { id: 'espresso',     name: 'Espresso',      cat: 'Coffee',  color: '#3a1f0e', accent: '#5a2f17', shimmer: '#7a4625', mg: 64, kcal: 3   },
+  { id: 'hot-water',    name: 'Hot water',     cat: 'Base',    color: '#d6c5a8', accent: '#bba98a', shimmer: '#f0e6d0', mg: 0,  kcal: 0   },
+  { id: 'cold-water',   name: 'Cold water',    cat: 'Base',    color: '#cfe4eb', accent: '#a6c8d1', shimmer: '#e3eef2', mg: 0,  kcal: 0   },
+  { id: 'steamed-milk', name: 'Steamed milk',  cat: 'Milk',    color: '#f3ead4', accent: '#d6c69e', shimmer: '#fef6e0', mg: 0,  kcal: 80  },
+  { id: 'milk-foam',    name: 'Milk foam',     cat: 'Milk',    color: '#fcf6e3', accent: '#e6d7b4', shimmer: '#ffffff', mg: 0,  kcal: 10  },
+  { id: 'cold-milk',    name: 'Cold milk',     cat: 'Milk',    color: '#f6efdb', accent: '#dccfb1', shimmer: '#fff8e6', mg: 0,  kcal: 80  },
+  { id: 'ice',          name: 'Ice',           cat: 'Extra',   color: '#d8edf2', accent: '#a5cfdb', shimmer: '#ffffff', mg: 0,  kcal: 0   },
+  { id: 'chocolate',    name: 'Chocolate',     cat: 'Syrup',   color: '#3e210f', accent: '#5a3018', shimmer: '#7a4218', mg: 5,  kcal: 100 },
+  { id: 'vanilla',      name: 'Vanilla',       cat: 'Syrup',   color: '#d8b76a', accent: '#b39555', shimmer: '#f0d488', mg: 0,  kcal: 80  },
+  { id: 'matcha',       name: 'Matcha',        cat: 'Other',   color: '#6c8a4a', accent: '#92a86b', shimmer: '#a8c180', mg: 35, kcal: 5   },
+  { id: 'whipped',      name: 'Whipped cream', cat: 'Topping', color: '#fffaee', accent: '#e8dcc4', shimmer: '#ffffff', mg: 0,  kcal: 60  },
+];
+const ING_BY_ID = Object.fromEntries(INGREDIENTS.map(i => [i.id, i]));
+const HOT_INGS = new Set(['espresso','hot-water','steamed-milk','milk-foam','chocolate','vanilla','matcha']);
+
+const RECIPES = [
+  { ing: ['espresso'],                                      name: 'Espresso',          tagline: 'Pure shot. No frills.',           drinkId: 'espresso'     },
+  { ing: ['espresso','espresso'],                           name: 'Double Espresso',   tagline: 'Twice the punch.',                drinkId: 'dbl-espresso' },
+  { ing: ['espresso','hot-water'],                          name: 'Americano',         tagline: 'Espresso, stretched long.',       drinkId: 'americano'    },
+  { ing: ['espresso','hot-water','ice'],                    name: 'Iced Americano',    tagline: 'Espresso on the rocks.',          drinkId: 'americano'    },
+  { ing: ['espresso','steamed-milk','milk-foam'],           name: 'Cappuccino',        tagline: 'Equal coffee, milk, foam.',       drinkId: 'cappuccino'   },
+  { ing: ['espresso','steamed-milk','steamed-milk'],        name: 'Latte',             tagline: 'A milky hug.',                    drinkId: 'latte'        },
+  { ing: ['espresso','espresso','milk-foam'],               name: 'Flat White',        tagline: 'Velvet microfoam, double shot.',  drinkId: 'flat-white'   },
+  { ing: ['espresso','steamed-milk','chocolate'],           name: 'Mocha',             tagline: 'Where coffee meets dessert.',     drinkId: 'mocha'        },
+  { ing: ['espresso','ice','cold-milk'],                    name: 'Iced Latte',        tagline: 'Cool, milky, caffeinated.',       drinkId: 'latte'        },
+  { ing: ['espresso','vanilla','steamed-milk'],             name: 'Vanilla Latte',     tagline: 'Latte, dressed sweet.',           drinkId: 'latte'        },
+  { ing: ['espresso','steamed-milk','chocolate','whipped'], name: 'Mocha Deluxe',      tagline: 'Mocha plus a cloud on top.',      drinkId: 'mocha'        },
+  { ing: ['matcha','steamed-milk'],                         name: 'Matcha Latte',      tagline: 'Earthy, grassy, gentle lift.',    drinkId: 'matcha'       },
+  { ing: ['matcha','hot-water'],                            name: 'Matcha Tea',        tagline: 'Pure green energy.',              drinkId: 'green-tea'    },
+  { ing: ['espresso','cold-water','ice'],                   name: 'Cold-Brew Style',   tagline: 'Improvised, but it works.',       drinkId: 'cold-brew'    },
+  { ing: ['espresso','espresso','ice','cold-milk'],         name: 'Iced Double Latte', tagline: 'Big chill, big buzz.',            drinkId: 'latte'        },
+];
+const blendKey = arr => [...arr].sort().join('|');
+const RECIPE_BY_KEY = Object.fromEntries(RECIPES.map(r => [blendKey(r.ing), r]));
+function matchRecipe(ids) { return ids.length ? (RECIPE_BY_KEY[blendKey(ids)] || null) : null; }
+const MAX_LAYERS = 6;
+
+function BlendIcon({ size = 18 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M9 3h6M10 3v6.2L5.5 18a2 2 0 0 0 1.8 3h9.4a2 2 0 0 0 1.8-3L14 9.2V3" />
+      <path d="M7.5 14h9" />
+    </svg>
+  );
+}
+
+function BlendNavButton({ onClick, label = 'Blend' }) {
+  return (
+    <button onClick={() => { buzz(6); onClick(); }} title="Open Blend Lab" style={{
+      display: 'inline-flex', alignItems: 'center', gap: 8,
+      padding: '8px 12px', background: 'transparent', border: T.cardBorder,
+      borderRadius: T.radius, cursor: 'pointer', color: T.fg,
+      fontFamily: T.fontMono, fontSize: 11, letterSpacing: '0.16em', textTransform: 'uppercase',
+      transition: 'color 0.15s',
+    }}
+    onMouseEnter={e => { e.currentTarget.style.color = T.accent; }}
+    onMouseLeave={e => { e.currentTarget.style.color = T.fg; }}>
+      <BlendIcon size={14} />
+      <span>{label}</span>
+    </button>
+  );
+}
+
+function BlendView({ onBack, addEntry, isDesktop }) {
+  const [cup, setCup] = useState([]);
+  const [drag, setDrag] = useState(null);
+  const [hoverCup, setHoverCup] = useState(false);
+  const [rimFlash, setRimFlash] = useState(0);
+  const [logged, setLogged] = useState(false);
+  const cupRef = useRef(null);
+
+  const ids = cup.map(c => c.id);
+  const idsKey = ids.join('|');
+  const matched = useMemo(() => matchRecipe(ids), [idsKey]);
+  const totalMg = cup.reduce((s, c) => s + c.ingredient.mg, 0);
+  const totalKcal = cup.reduce((s, c) => s + c.ingredient.kcal, 0);
+  const hot = cup.some(c => HOT_INGS.has(c.id));
+
+  const addToCup = useCallback((id) => {
+    const ing = ING_BY_ID[id]; if (!ing) return;
+    setCup(c => {
+      if (c.length >= MAX_LAYERS) { buzz(4); return c; }
+      buzz(10);
+      setRimFlash(f => f + 1);
+      return [...c, { key: `${id}-${Date.now()}-${Math.random().toString(36).slice(2,5)}`, id, ingredient: ing }];
+    });
+  }, []);
+
+  const removeLayer = (key) => { buzz(5); setCup(c => c.filter(l => l.key !== key)); };
+  const clearCup = () => { buzz(6); setCup([]); setLogged(false); };
+
+  const startDrag = (id, e) => {
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
+    e.preventDefault();
+    const ing = ING_BY_ID[id];
+    setDrag({ id, ing, x: e.clientX, y: e.clientY, startX: e.clientX, startY: e.clientY, active: false });
+  };
+
+  useEffect(() => {
+    if (!drag) return;
+    const onMove = (e) => {
+      setDrag(prev => {
+        if (!prev) return null;
+        const dx = Math.abs(e.clientX - prev.startX);
+        const dy = Math.abs(e.clientY - prev.startY);
+        const active = prev.active || dx > 6 || dy > 6;
+        return { ...prev, x: e.clientX, y: e.clientY, active };
+      });
+    };
+    const onUp = (e) => {
+      const r = cupRef.current?.getBoundingClientRect();
+      const wasActive = Math.abs(e.clientX - drag.startX) > 6 || Math.abs(e.clientY - drag.startY) > 6;
+      const inCup = r && e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom;
+      if (!wasActive || inCup) addToCup(drag.id);
+      setDrag(null);
+      setHoverCup(false);
+    };
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+    window.addEventListener('pointercancel', onUp);
+    return () => {
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+      window.removeEventListener('pointercancel', onUp);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [drag?.id]);
+
+  useEffect(() => {
+    if (!drag || !drag.active) { setHoverCup(false); return; }
+    const r = cupRef.current?.getBoundingClientRect();
+    if (!r) return;
+    setHoverCup(drag.x >= r.left && drag.x <= r.right && drag.y >= r.top && drag.y <= r.bottom);
+  }, [drag?.x, drag?.y, drag?.active]);
+
+  const logIt = () => {
+    if (!matched || !DRINK_BY_ID[matched.drinkId]) return;
+    addEntry(matched.drinkId, 1);
+    buzz([10, 30, 14]);
+    setLogged(true);
+    setTimeout(() => onBack(), 720);
+  };
+
+  return (
+    <div style={{ animation: 'kaffeRise 280ms ease-out' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: isDesktop ? '4px 0 22px' : '4px 0 14px', gap: 12 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
+          <button onClick={() => { buzz(6); onBack(); }} aria-label="Back" style={{
+            background: 'transparent', border: T.cardBorder, color: T.fg, width: 34, height: 34,
+            borderRadius: T.radius, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+          }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6" /></svg>
+          </button>
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontFamily: T.fontMono, fontSize: 10, letterSpacing: '0.18em', textTransform: 'uppercase', color: T.muted, marginBottom: 4 }}>Lab</div>
+            <div style={{ fontFamily: T.fontDisplay, fontSize: isDesktop ? 28 : 24, lineHeight: 1.1, color: T.fg, fontWeight: T.displayWeight, letterSpacing: T.displayTracking }}>Blend a drink</div>
+          </div>
+        </div>
+        <span style={{ fontFamily: T.fontMono, fontSize: 11, color: T.muted, letterSpacing: '0.06em', whiteSpace: 'nowrap' }}>
+          {cup.length} / {MAX_LAYERS} layers
+        </span>
+      </div>
+
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: isDesktop ? 'minmax(280px, 1fr) minmax(320px, 1.1fr)' : '1fr',
+        gap: isDesktop ? 28 : 16,
+      }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16, minWidth: 0 }}>
+          <CupZone
+            ref={cupRef} cup={cup} hot={hot} hoverCup={hoverCup}
+            totalMg={totalMg} totalKcal={totalKcal} rimFlash={rimFlash}
+            removeLayer={removeLayer} clear={clearCup} isDesktop={isDesktop}
+          />
+          <ResultPanel cup={cup} matched={matched} totalMg={totalMg} totalKcal={totalKcal} onLog={logIt} logged={logged} isDesktop={isDesktop} />
+        </div>
+        <Palette onStartDrag={startDrag} dragId={drag?.id} cupFull={cup.length >= MAX_LAYERS} isDesktop={isDesktop} />
+      </div>
+
+      {drag && drag.active && (
+        <div style={{
+          position: 'fixed', left: drag.x, top: drag.y,
+          transform: 'translate(-50%, -50%) rotate(-2deg) scale(1.04)',
+          pointerEvents: 'none', zIndex: 999,
+          filter: 'drop-shadow(0 14px 28px rgba(0,0,0,0.45))',
+          width: 160,
+        }}>
+          <IngredientCard ing={drag.ing} dragging />
+        </div>
+      )}
+    </div>
+  );
+}
+
+const CupZone = React.forwardRef(function CupZone({ cup, hot, hoverCup, totalMg, totalKcal, rimFlash, removeLayer, clear, isDesktop }, ref) {
+  const CUP_W = isDesktop ? 240 : 196;
+  const CUP_H = isDesktop ? 320 : 260;
+  return (
+    <Card padding={isDesktop ? 24 : 18}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+        <div style={{ fontFamily: T.fontMono, fontSize: 10, letterSpacing: '0.16em', textTransform: 'uppercase', color: T.muted, fontWeight: 500 }}>Your cup</div>
+        {cup.length > 0 && (
+          <button onClick={clear} style={{ background: 'none', border: 'none', cursor: 'pointer', fontFamily: T.fontMono, fontSize: 10, letterSpacing: '0.14em', textTransform: 'uppercase', color: T.muted, padding: '4px 0' }}>Reset</button>
+        )}
+      </div>
+
+      <div style={{ display: 'flex', justifyContent: 'center', position: 'relative', padding: '24px 0 8px' }}>
+        <div aria-hidden style={{
+          position: 'absolute', left: '50%', top: '55%',
+          width: CUP_W + 90, height: CUP_H + 70, transform: 'translate(-50%, -50%)',
+          borderRadius: '50%',
+          background: `radial-gradient(closest-side, ${T.accent}, transparent 60%)`,
+          opacity: hoverCup ? 0.18 : 0, transition: 'opacity 0.2s', pointerEvents: 'none',
+        }} />
+
+        <div ref={ref} style={{
+          position: 'relative', width: CUP_W, height: CUP_H,
+          transition: 'transform 0.25s',
+          transform: hoverCup ? 'scale(1.05)' : 'scale(1)',
+          animation: cup.length === 0 ? 'kaffeCupBob 3.6s ease-in-out infinite' : 'none',
+        }}>
+          {hot && cup.length > 0 && (
+            <svg width="80" height="64" viewBox="0 0 80 64" style={{ position: 'absolute', left: '50%', top: -54, transform: 'translateX(-50%)', pointerEvents: 'none' }}>
+              {[0,1,2].map(i => (
+                <path key={i}
+                  d={`M ${22 + i*14} 62 Q ${28 + i*14} 44 ${22 + i*14} 26 Q ${16 + i*14} 12 ${22 + i*14} 0`}
+                  fill="none" stroke="var(--fg)" strokeOpacity="0.18" strokeWidth="2" strokeLinecap="round"
+                  style={{ animation: 'kaffeSteam 2.8s ease-in-out infinite', animationDelay: `${i*0.55}s`, transformOrigin: 'center bottom' }}
+                />
+              ))}
+            </svg>
+          )}
+
+          <div style={{
+            position: 'absolute', top: '36%', right: -22,
+            width: 28, height: 70,
+            borderTopRightRadius: 28, borderBottomRightRadius: 28,
+            border: `2px solid ${alpha(T.fg, 22)}`, borderLeft: 'none',
+            background: 'transparent',
+          }} />
+
+          <div style={{
+            position: 'absolute', inset: 0,
+            border: `2px solid ${alpha(T.fg, 22)}`,
+            borderRadius: '12px 12px 38px 38px',
+            background: alpha(T.fg, 3),
+            overflow: 'hidden',
+            boxShadow: hoverCup ? `inset 0 0 0 2px ${alpha(T.accent, 60)}` : 'none',
+            transition: 'box-shadow 0.2s',
+          }}>
+            <div style={{
+              position: 'absolute', inset: '10px 6px 6px 6px',
+              display: 'flex', flexDirection: 'column-reverse',
+              borderRadius: '6px 6px 32px 32px', overflow: 'hidden',
+            }}>
+              {cup.map((layer) => (
+                <CupLayer key={layer.key} layer={layer} onRemove={() => removeLayer(layer.key)} />
+              ))}
+            </div>
+
+            {cup.length === 0 && (
+              <div style={{
+                position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                color: T.muted, fontFamily: T.fontMono, fontSize: 10, letterSpacing: '0.18em',
+                textTransform: 'uppercase', pointerEvents: 'none', textAlign: 'center', padding: 24, lineHeight: 1.8,
+              }}>
+                <span>Drag<br />ingredients<br />here</span>
+              </div>
+            )}
+
+            <div key={rimFlash} style={{
+              position: 'absolute', left: 16, right: 16, top: 8, height: 4,
+              borderRadius: 2, transformOrigin: 'center',
+              background: `linear-gradient(90deg, transparent, ${T.accent}, transparent)`,
+              animation: rimFlash > 0 ? 'kaffeRimSplash 700ms ease-out' : 'none',
+              opacity: 0, pointerEvents: 'none',
+            }} />
+
+            <div style={{
+              position: 'absolute', left: 6, right: 6, top: 2, height: 8,
+              borderRadius: 6, pointerEvents: 'none',
+              background: `linear-gradient(180deg, ${alpha(T.fg, 5)}, transparent)`,
+            }} />
+          </div>
+        </div>
+      </div>
+
+      <div style={{ display: 'flex', gap: 18, width: '100%', justifyContent: 'space-around', paddingTop: 14, borderTop: T.divider, marginTop: 10 }}>
+        <BStat label="Caffeine" value={totalMg} unit="mg" />
+        <BStat label="Calories" value={totalKcal} unit="kcal" />
+        <BStat label="Layers" value={`${cup.length}/${MAX_LAYERS}`} />
+      </div>
+    </Card>
+  );
+});
+
+function BStat({ label, value, unit }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'center' }}>
+      <span style={{ fontFamily: T.fontMono, fontSize: 9, letterSpacing: '0.14em', textTransform: 'uppercase', color: T.muted }}>{label}</span>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 4 }}>
+        <span style={{ fontFamily: T.fontDisplay, fontSize: 22, color: T.fg, fontWeight: T.displayWeight, letterSpacing: T.displayTracking, fontFeatureSettings: '"tnum"' }}>{value}</span>
+        {unit && <span style={{ fontFamily: T.fontMono, fontSize: 10, color: T.muted }}>{unit}</span>}
+      </div>
+    </div>
+  );
+}
+
+function CupLayer({ layer, onRemove }) {
+  const ing = layer.ingredient;
+  return (
+    <button onClick={onRemove} title={`${ing.name} — tap to remove`} style={{
+      flex: 1, minHeight: 0, position: 'relative', border: 'none', padding: 0, cursor: 'pointer',
+      background: `linear-gradient(180deg, ${ing.accent}, ${ing.color})`,
+      animation: 'kaffeLiquidIn 540ms cubic-bezier(0.34, 1.3, 0.64, 1)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      overflow: 'hidden',
+    }}>
+      <div aria-hidden style={{
+        position: 'absolute', top: 0, left: 0, right: 0, height: 4,
+        background: `linear-gradient(180deg, ${alpha(ing.shimmer, 55)}, transparent)`,
+        pointerEvents: 'none',
+      }} />
+      <span style={{
+        fontFamily: T.fontMono, fontSize: 9.5, letterSpacing: '0.14em', textTransform: 'uppercase',
+        color: 'rgba(255,255,255,0.92)',
+        background: 'rgba(0,0,0,0.28)', padding: '3px 9px', borderRadius: 1,
+        whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 'calc(100% - 20px)',
+      }}>{ing.name}</span>
+    </button>
+  );
+}
+
+function Palette({ onStartDrag, dragId, cupFull, isDesktop }) {
+  const grouped = useMemo(() => {
+    const g = {};
+    INGREDIENTS.forEach(i => { (g[i.cat] = g[i.cat] || []).push(i); });
+    return g;
+  }, []);
+  return (
+    <Card padding={isDesktop ? 24 : 18}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14, gap: 10 }}>
+        <div style={{ fontFamily: T.fontMono, fontSize: 10, letterSpacing: '0.16em', textTransform: 'uppercase', color: T.muted, fontWeight: 500 }}>Ingredients</div>
+        <span style={{ fontFamily: T.fontMono, fontSize: 10, color: T.muted, letterSpacing: '0.04em', textAlign: 'right' }}>
+          {cupFull ? 'Cup full · reset to add more' : 'Drag or tap to add'}
+        </span>
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+        {Object.entries(grouped).map(([cat, items]) => (
+          <div key={cat}>
+            <div style={{ fontFamily: T.fontMono, fontSize: 9, letterSpacing: '0.16em', textTransform: 'uppercase', color: T.muted, marginBottom: 6 }}>{cat}</div>
+            <div style={{ display: 'grid', gridTemplateColumns: isDesktop ? 'repeat(3, 1fr)' : 'repeat(2, 1fr)', gap: 8 }}>
+              {items.map(ing => (
+                <IngredientCard
+                  key={ing.id} ing={ing}
+                  onPointerDown={(e) => onStartDrag(ing.id, e)}
+                  isBeingDragged={dragId === ing.id}
+                  disabled={cupFull}
+                />
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    </Card>
+  );
+}
+
+function IngredientCard({ ing, onPointerDown, isBeingDragged, dragging, disabled }) {
+  return (
+    <div
+      onPointerDown={disabled ? undefined : onPointerDown}
+      style={{
+        position: 'relative', padding: '12px 12px',
+        background: dragging ? T.sheetBg : 'transparent',
+        border: T.cardBorder, borderRadius: T.radius,
+        cursor: disabled ? 'not-allowed' : (dragging ? 'grabbing' : 'grab'),
+        userSelect: 'none', touchAction: 'none',
+        opacity: isBeingDragged ? 0.35 : disabled ? 0.4 : 1,
+        transition: 'opacity 0.15s',
+        display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'flex-start',
+      }}
+    >
+      <div aria-hidden style={{
+        width: '100%', height: 26, borderRadius: 2,
+        background: `linear-gradient(180deg, ${ing.accent}, ${ing.color})`,
+        boxShadow: `inset 0 1px 0 ${alpha(ing.shimmer, 55)}, inset 0 -3px 6px rgba(0,0,0,0.12)`,
+      }} />
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 2, width: '100%' }}>
+        <span style={{ fontFamily: T.fontBody, fontSize: 13, color: T.fg, fontWeight: 500 }}>{ing.name}</span>
+        <span style={{ fontFamily: T.fontMono, fontSize: 9.5, color: T.muted, letterSpacing: '0.04em' }}>
+          {ing.mg > 0 ? `+${ing.mg} mg` : '0 mg'} · {ing.kcal > 0 ? `+${ing.kcal} kcal` : '0 kcal'}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+function ResultPanel({ cup, matched, totalMg, totalKcal, onLog, logged, isDesktop }) {
+  if (cup.length === 0) {
+    return (
+      <Card padding={isDesktop ? 22 : 18}>
+        <div style={{ fontFamily: T.fontMono, fontSize: 10, letterSpacing: '0.16em', textTransform: 'uppercase', color: T.muted, marginBottom: 10, fontWeight: 500 }}>How to play</div>
+        <div style={{ fontFamily: T.fontBody, fontSize: 13.5, lineHeight: 1.6, color: T.fg }}>
+          <p style={{ margin: '0 0 8px' }}>Drag ingredients into the cup — or just tap them — to build a drink.</p>
+          <p style={{ margin: '0 0 8px', color: T.muted }}>Hit a classic combo and we'll name it. Anything else is a custom blend.</p>
+          <p style={{ margin: 0, color: T.muted }}>Tap a layer to remove it.</p>
+        </div>
+      </Card>
+    );
+  }
+  if (matched) {
+    const drink = DRINK_BY_ID[matched.drinkId];
+    return (
+      <Card padding={isDesktop ? 24 : 18} style={{
+        position: 'relative', overflow: 'hidden',
+        border: `1px solid ${alpha(T.accent, 60)}`,
+        animation: 'kaffeRise 320ms ease-out',
+      }}>
+        <div aria-hidden style={{
+          position: 'absolute', top: -50, right: -50, width: 180, height: 180,
+          background: `radial-gradient(closest-side, ${alpha(T.accent, 22)}, transparent)`,
+          pointerEvents: 'none',
+        }} />
+        <div style={{ position: 'relative', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, marginBottom: 4 }}>
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontFamily: T.fontMono, fontSize: 10, letterSpacing: '0.18em', textTransform: 'uppercase', color: T.accent, marginBottom: 6 }}>✓ Match</div>
+            <div style={{ fontFamily: T.fontDisplay, fontSize: isDesktop ? 30 : 24, lineHeight: 1.1, color: T.fg, fontWeight: T.displayWeight, letterSpacing: T.displayTracking }}>{matched.name}</div>
+            <div style={{ fontFamily: T.fontBody, fontSize: 13.5, color: T.muted, marginTop: 6, maxWidth: 380, lineHeight: 1.45 }}>{matched.tagline}</div>
+          </div>
+          {drink && (
+            <div style={{ width: 44, height: 44, borderRadius: T.radius, border: T.cardBorder, display: 'flex', alignItems: 'center', justifyContent: 'center', color: T.accent, flexShrink: 0 }}>
+              <DrinkGlyph cat={drink.cat} size={22} />
+            </div>
+          )}
+        </div>
+        <div style={{ display: 'flex', gap: 18, padding: '14px 0', borderTop: T.divider, marginTop: 14, flexWrap: 'wrap' }}>
+          <BStat label="Caffeine" value={totalMg} unit="mg" />
+          <BStat label="Calories" value={totalKcal} unit="kcal" />
+          {drink && drink.serving && <BStat label="Serving" value={drink.serving} />}
+        </div>
+        <button onClick={onLog} disabled={logged} style={{
+          width: '100%', padding: '14px', marginTop: 6,
+          borderRadius: T.radius, border: 'none',
+          background: logged ? T.ok : T.accent,
+          color: T.bg, fontFamily: T.fontMono, fontSize: 11, fontWeight: 600,
+          letterSpacing: '0.18em', textTransform: 'uppercase', cursor: logged ? 'default' : 'pointer',
+          transition: 'background 0.2s',
+        }}>
+          {logged ? '✓ Logged to today' : `Log this ${matched.name}`}
+        </button>
+      </Card>
+    );
+  }
+  return (
+    <Card padding={isDesktop ? 22 : 18}>
+      <div style={{ fontFamily: T.fontMono, fontSize: 10, letterSpacing: '0.18em', textTransform: 'uppercase', color: T.muted, marginBottom: 8, fontWeight: 500 }}>Custom blend</div>
+      <div style={{ fontFamily: T.fontDisplay, fontSize: isDesktop ? 22 : 19, color: T.fg, fontWeight: T.displayWeight, letterSpacing: T.displayTracking, lineHeight: 1.2, marginBottom: 8 }}>
+        {cup.length === 1 ? 'Looking experimental.' : 'Off the menu — but valid.'}
+      </div>
+      <div style={{ fontFamily: T.fontBody, fontSize: 13, color: T.muted, lineHeight: 1.5 }}>
+        {cup.length === 1
+          ? 'Add another ingredient — most classic drinks have 2 to 4 layers.'
+          : 'No standard match. Swap a layer, add one more, or hit Reset to start fresh.'}
+      </div>
+      <div style={{ display: 'flex', gap: 18, paddingTop: 14, marginTop: 12, borderTop: T.divider, flexWrap: 'wrap' }}>
+        <BStat label="Caffeine" value={totalMg} unit="mg" />
+        <BStat label="Calories" value={totalKcal} unit="kcal" />
+        <BStat label="Layers" value={`${cup.length}/${MAX_LAYERS}`} />
+      </div>
+    </Card>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════════════════
 // MOBILE LAYOUT
 // ══════════════════════════════════════════════════════════════════════════
 function MobileApp({ entries, addEntry, removeEntry, updateEntryTime, waters, addWater, removeWater, updateWaterTime, now, setBrowseOpen, setPendingDrink }) {
   const [width, setWidth] = useState(Math.min(window.innerWidth, 480));
+  const [view, setView] = useState('today');
   useEffect(() => {
     const onResize = () => setWidth(Math.min(window.innerWidth, 480));
     window.addEventListener('resize', onResize);
     return () => window.removeEventListener('resize', onResize);
   }, []);
+
+  if (view === 'blend') {
+    return (
+      <div className="kaffe-mobile" style={{ maxWidth: 480, margin: '0 auto', padding: '20px 18px 60px' }}>
+        <BlendView onBack={() => setView('today')} addEntry={addEntry} isDesktop={false} />
+      </div>
+    );
+  }
 
   const total = entries.reduce((s, e) => s + e.mg, 0);
   const kcal = entries.reduce((s, e) => s + e.kcal, 0);
@@ -1022,7 +1537,11 @@ function MobileApp({ entries, addEntry, removeEntry, updateEntryTime, waters, ad
           <div style={{ fontFamily: T.fontMono, fontSize: 10, letterSpacing: '0.18em', textTransform: 'uppercase', color: T.muted, marginBottom: 4 }}>{greeting.toUpperCase()}</div>
           <div style={{ fontFamily: T.fontDisplay, fontSize: 30, lineHeight: 1.05, color: T.fg, fontWeight: T.displayWeight, letterSpacing: T.displayTracking }}>Today</div>
         </div>
-        <span style={{ display: 'inline-flex', gap: 6 }}><SoundToggle /><ThemeToggle /></span>
+        <span style={{ display: 'inline-flex', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+          <BlendNavButton onClick={() => setView('blend')} label="Blend" />
+          <SoundToggle />
+          <ThemeToggle />
+        </span>
       </div>
 
       <Card padding={16}>
@@ -1170,20 +1689,77 @@ function MobileApp({ entries, addEntry, removeEntry, updateEntryTime, waters, ad
 // ══════════════════════════════════════════════════════════════════════════
 // DESKTOP LAYOUT
 // ══════════════════════════════════════════════════════════════════════════
-function KaffeWordmark({ size = 18 }) {
+function KaffeWordmark({ size = 18, onClick, active = false }) {
+  const [hover, setHover] = useState(false);
+  const interactive = !!onClick;
+  const lift = interactive && (hover || active);
+  const dim = size + 4;
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-      <svg width={size + 4} height={size + 4} viewBox="0 0 24 24" fill="none" stroke={T.accent} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M4 9h13v6a4 4 0 0 1-4 4H8a4 4 0 0 1-4-4V9z" />
-        <path d="M17 11h2a2 2 0 0 1 0 4h-2" />
-        <path d="M7 4c0 1.5 1 1.5 1 3M11 4c0 1.5 1 1.5 1 3" />
-      </svg>
-      <span style={{ fontFamily: T.fontMono, fontSize: size, color: T.fg, fontWeight: 600, letterSpacing: '-0.01em' }}>kaffe</span>
-    </div>
+    <button
+      onClick={onClick ? () => { buzz(6); onClick(); } : undefined}
+      onMouseEnter={interactive ? () => setHover(true) : undefined}
+      onMouseLeave={interactive ? () => setHover(false) : undefined}
+      onFocus={interactive ? () => setHover(true) : undefined}
+      onBlur={interactive ? () => setHover(false) : undefined}
+      title={interactive ? 'Open Blend Lab' : undefined}
+      aria-label={interactive ? 'Open Blend Lab' : undefined}
+      style={{
+        display: 'flex', alignItems: 'center', gap: 10, padding: 0,
+        background: 'transparent', border: 'none',
+        cursor: interactive ? 'pointer' : 'default',
+        font: 'inherit', color: 'inherit',
+      }}
+    >
+      <span style={{ position: 'relative', display: 'inline-block', width: dim, height: dim }}>
+        {/* Animated steam wisps on hover (above the static decorative ones in the SVG) */}
+        {interactive && (
+          <svg
+            aria-hidden width={dim + 6} height={14} viewBox="0 0 30 14"
+            style={{
+              position: 'absolute', left: '50%', top: -10,
+              transform: 'translateX(-50%)', pointerEvents: 'none',
+              opacity: lift ? 1 : 0, transition: 'opacity 0.2s',
+            }}
+          >
+            {[0, 1, 2].map(i => (
+              <path key={i}
+                d={`M ${8 + i*7} 14 Q ${11 + i*7} 8 ${8 + i*7} 2`}
+                fill="none" stroke="currentColor" strokeOpacity="0.55" strokeWidth="1.4" strokeLinecap="round"
+                style={{
+                  color: T.accent,
+                  animation: lift ? `kaffeSteam 1.4s ease-in-out ${i * 0.18}s infinite` : 'none',
+                  transformOrigin: 'center bottom',
+                }}
+              />
+            ))}
+          </svg>
+        )}
+        <svg
+          width={dim} height={dim} viewBox="0 0 24 24" fill="none"
+          stroke={T.accent} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"
+          style={{
+            display: 'block',
+            transformOrigin: '75% 88%',
+            transform: lift ? 'rotate(-14deg) translateY(-1px)' : 'rotate(0) translateY(0)',
+            transition: 'transform 320ms cubic-bezier(0.34, 1.3, 0.64, 1)',
+          }}
+        >
+          <path d="M4 9h13v6a4 4 0 0 1-4 4H8a4 4 0 0 1-4-4V9z" />
+          <path d="M17 11h2a2 2 0 0 1 0 4h-2" />
+          <path d="M7 4c0 1.5 1 1.5 1 3M11 4c0 1.5 1 1.5 1 3" />
+        </svg>
+      </span>
+      <span style={{
+        fontFamily: T.fontMono, fontSize: size,
+        color: lift ? T.accent : T.fg,
+        fontWeight: 600, letterSpacing: '-0.01em',
+        transition: 'color 0.2s',
+      }}>kaffe</span>
+    </button>
   );
 }
 
-function TopNav({ tab, onTab, now }) {
+function TopNav({ tab, onTab, now, onOpenBlend }) {
   const tabs = [
     { id: 'today', label: 'Today' },
     { id: 'history', label: 'History' },
@@ -1193,7 +1769,7 @@ function TopNav({ tab, onTab, now }) {
   return (
     <div style={{ height: 64, padding: '0 32px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: T.divider, background: T.bg, position: 'sticky', top: 0, zIndex: 10 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 56 }}>
-        <KaffeWordmark />
+        <KaffeWordmark onClick={onOpenBlend} active={tab === 'blend'} />
         <div style={{ display: 'flex', gap: 4 }}>
           {tabs.map(t => (
             <button key={t.id} onClick={() => onTab(t.id)} style={{ padding: '8px 16px', border: 'none', cursor: 'pointer', background: 'transparent', color: tab === t.id ? T.fg : T.muted, fontFamily: T.fontMono, fontSize: 12, letterSpacing: '0.12em', textTransform: 'uppercase', fontWeight: tab === t.id ? 600 : 400, borderBottom: tab === t.id ? `1px solid ${T.accent}` : '1px solid transparent', borderRadius: 0, transition: 'color 0.15s' }}>{t.label}</button>
@@ -1650,14 +2226,16 @@ function DesktopApp({ entries, addEntry, removeEntry, updateEntryTime, waters, a
   })();
   return (
     <div style={{ width: '100%', minHeight: '100vh', background: T.bg, color: T.fg, fontFamily: T.fontBody }}>
-      <TopNav tab={tab} onTab={setTab} now={now} />
+      <TopNav tab={tab} onTab={setTab} now={now} onOpenBlend={() => setTab('blend')} />
       <div style={{ padding: '32px 32px 48px', maxWidth: 1600, margin: '0 auto' }}>
-        <div style={{ marginBottom: 28, display: 'flex', alignItems: 'baseline', gap: 16, flexWrap: 'wrap' }}>
-          <h1 style={{ margin: 0, fontFamily: T.fontDisplay, fontSize: 32, color: T.fg, fontWeight: T.displayWeight, letterSpacing: T.displayTracking }}>
-            {tab === 'today' ? greeting : tab === 'history' ? 'History' : 'Sleep forecast'}
-          </h1>
-          <span style={{ fontFamily: T.fontMono, fontSize: 12, color: T.muted, letterSpacing: '0.08em' }}>{new Date(now).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}</span>
-        </div>
+        {tab !== 'blend' && (
+          <div style={{ marginBottom: 28, display: 'flex', alignItems: 'baseline', gap: 16, flexWrap: 'wrap' }}>
+            <h1 style={{ margin: 0, fontFamily: T.fontDisplay, fontSize: 32, color: T.fg, fontWeight: T.displayWeight, letterSpacing: T.displayTracking }}>
+              {tab === 'today' ? greeting : tab === 'history' ? 'History' : 'Sleep forecast'}
+            </h1>
+            <span style={{ fontFamily: T.fontMono, fontSize: 12, color: T.muted, letterSpacing: '0.08em' }}>{new Date(now).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}</span>
+          </div>
+        )}
 
         {tab === 'today' && (
           <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1.7fr) minmax(0,1fr)', gap: 24, alignItems: 'start' }}>
@@ -1677,6 +2255,7 @@ function DesktopApp({ entries, addEntry, removeEntry, updateEntryTime, waters, a
         )}
         {tab === 'history' && <HistoryView entries={entries} />}
         {tab === 'sleep' && <SleepView entries={entries} now={now} />}
+        {tab === 'blend' && <BlendView onBack={() => setTab('today')} addEntry={addEntry} isDesktop={true} />}
       </div>
     </div>
   );
