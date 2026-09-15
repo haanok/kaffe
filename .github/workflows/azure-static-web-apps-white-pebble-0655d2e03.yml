@@ -19,6 +19,15 @@ jobs:
         with:
           submodules: true
           lfs: false
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Package site
+        run: npm run package:site
+        
       - name: Build And Deploy
         id: builddeploy
         uses: Azure/static-web-apps-deploy@v1
