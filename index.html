@@ -144,6 +144,14 @@
     ::-webkit-scrollbar-track { background: transparent; }
     .kaffe-mobile ::-webkit-scrollbar { display: none; }
     .kaffe-mobile { scrollbar-width: none; }
+    button, input { -webkit-tap-highlight-color: transparent; }
+    button:focus-visible, input:focus-visible { outline: 2px solid var(--accent) !important; outline-offset: 4px; }
+    button:not(:disabled):active { filter: brightness(1.12); }
+    input[type="range"]::-moz-range-track { height: 3px; background: var(--grid); }
+    input[type="range"]::-moz-range-thumb { width: 14px; height: 14px; border-radius: 50%; background: var(--accent); border: 2px solid var(--bg); }
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+    }
   </style>
   <script>
     (function() {
@@ -596,6 +604,21 @@ function DecayCurve({ entries, now, width, height = 150, showLabels = true }) {
 // ── Card (shared) ──────────────────────────────────────────────────────────
 function Card({ children, style = {}, padding = 16 }) {
   return <div style={{ background: T.card, border: T.cardBorder, borderRadius: T.radius, padding, ...style }}>{children}</div>;
+}
+
+function IntakeMeter({ total }) {
+  const color = total >= 400 ? T.danger : total >= 300 ? T.warn : T.accent;
+  return (
+    <div style={{ marginBottom: 16 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, marginBottom: 8, fontFamily: T.fontMono, fontSize: 10, color: T.muted }}>
+        <span>Daily intake · 400 mg reference</span>
+        <span style={{ color }}>{total > 400 ? `${total - 400} mg over` : total === 400 ? 'Reference reached' : `${400 - total} mg below`}</span>
+      </div>
+      <div role="meter" aria-label="Daily caffeine intake" aria-valuemin={0} aria-valuemax={400} aria-valuenow={Math.min(total, 400)} aria-valuetext={`${total} mg consumed; 400 mg daily reference`} style={{ height: 6, background: T.track, borderRadius: 6, overflow: 'hidden' }}>
+        <div style={{ height: '100%', width: `${Math.min(100, total / 4)}%`, background: color, borderRadius: 6, transition: 'width 400ms ease, background 200ms ease' }} />
+      </div>
+    </div>
+  );
 }
 
 // ── Browse — mobile bottom sheet ───────────────────────────────────────────
@@ -1235,8 +1258,8 @@ function BlendView({ onBack, addEntry, isDesktop }) {
   }, [drag?.active]);
 
   const logIt = () => {
-    if (!matched || !DRINK_BY_ID[matched.drinkId]) return;
-    addEntry(matched.drinkId, 1);
+    if (logged || !matched || !DRINK_BY_ID[matched.drinkId]) return;
+    addEntry(matched.drinkId, 1, { name: matched.name, mg: totalMg, kcal: totalKcal });
     buzz([10, 30, 14]);
     setLogged(true);
     setTimeout(() => onBack(), 720);
@@ -1517,9 +1540,12 @@ function RecipePanel({ onLoad, currentKey, isDesktop }) {
     <Card padding={isDesktop ? 24 : 18}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, gap: 10 }}>
         <div style={{ fontFamily: T.fontMono, fontSize: 10, letterSpacing: '0.16em', textTransform: 'uppercase', color: T.muted, fontWeight: 500 }}>Recipes</div>
-        <span style={{ fontFamily: T.fontMono, fontSize: 10, color: T.muted, letterSpacing: '0.04em', whiteSpace: 'nowrap' }}>
-          {RECIPES.length} known · tap to load
-        </span>
+        <button onClick={() => {
+          const choices = RECIPES.filter(r => blendKey(r.ing) !== currentKey);
+          onLoad(choices[Math.floor(Math.random() * choices.length)]);
+        }} style={{ background: 'var(--accent-tint)', border: T.cardBorder, borderRadius: T.radius, color: T.accent, cursor: 'pointer', padding: '8px 10px', fontFamily: T.fontMono, fontSize: 10 }}>
+          Surprise me
+        </button>
       </div>
       <div style={{
         display: 'flex', flexDirection: 'column', gap: 2,
@@ -1702,6 +1728,7 @@ function MobileApp({ entries, addEntry, removeEntry, updateEntryTime, waters, ad
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
         <KaffeWordmark size={16} onClick={() => setView('blend')} />
         <span style={{ display: 'inline-flex', gap: 6 }}>
+          <BlendNavButton onClick={() => setView('blend')} />
           <SoundToggle />
           <ThemeToggle />
         </span>
@@ -1724,6 +1751,7 @@ function MobileApp({ entries, addEntry, removeEntry, updateEntryTime, waters, ad
             <div style={{ fontFamily: T.fontMono, fontSize: 10, color: T.muted, marginTop: 4, letterSpacing: '0.04em' }}>mg in body</div>
           </div>
         </div>
+        <IntakeMeter total={total} />
         <DecayCurve entries={entries} now={now} width={curveWidth} height={150} />
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 10, paddingTop: 10, borderTop: T.divider }}>
           <span style={{ fontFamily: T.fontBody, fontSize: 12.5, color: T.muted, lineHeight: 1.4, flex: 1, paddingRight: 12 }}>{coach}</span>
@@ -1825,7 +1853,7 @@ function MobileApp({ entries, addEntry, removeEntry, updateEntryTime, waters, ad
                   <div style={{ width: 36, height: 36, borderRadius: T.radius, border: T.cardBorder, display: 'flex', alignItems: 'center', justifyContent: 'center', color: T.accent, flexShrink: 0 }}><DrinkGlyph cat={d.cat} /></div>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontFamily: T.fontBody, fontSize: 13, fontWeight: 500, color: T.fg, marginBottom: 4, display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <span>{d.name}</span>
+                      <span>{row.name || d.name}</span>
                       {row.amount && Math.abs(row.amount - 1) > 0.001 && (
                         <span style={{ fontFamily: T.fontMono, fontSize: 10, color: T.accent, border: `1px solid ${alpha(T.accent, 33)}`, padding: '0 5px', borderRadius: T.radius, letterSpacing: '0.04em' }}>{portionLabel(row.amount)}×</span>
                       )}
@@ -1931,6 +1959,7 @@ function TopNav({ tab, onTab, now, onOpenBlend }) {
     { id: 'today', label: 'Today' },
     { id: 'history', label: 'History' },
     { id: 'sleep', label: 'Sleep' },
+    { id: 'blend', label: 'Blend Lab' },
   ];
   const dateStr = new Date(now).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
   return (
@@ -1982,6 +2011,7 @@ function HeroGraph({ entries, now }) {
         <StatBlock label="Sleep-safe at" value={safeAt ? fmtTime(safeAt) : '—'} unit="under 50 mg" numeric={false} />
         <StatBlock label="Half-life" value="~5h" unit="metabolic rate" numeric={false} />
       </div>
+      <IntakeMeter total={total} />
       <div ref={ref}>
         {w > 0 && <DecayCurve entries={entries} now={now} width={w} height={300} />}
       </div>
@@ -2084,7 +2114,7 @@ function TodayLogDesktop({ entries, removeEntry, updateEntryTime, waters, remove
             <div style={{ color: T.accent, flexShrink: 0 }}><DrinkGlyph cat={d.cat} size={22} /></div>
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontFamily: T.fontBody, fontSize: 13.5, color: T.fg, fontWeight: 500, marginBottom: 4, display: 'flex', alignItems: 'center', gap: 8 }}>
-                <span>{d.name}</span>
+                <span>{row.name || d.name}</span>
                 {row.amount && Math.abs(row.amount - 1) > 0.001 && (
                   <span style={{ fontFamily: T.fontMono, fontSize: 10, color: T.accent, border: `1px solid ${alpha(T.accent, 33)}`, padding: '0 5px', borderRadius: T.radius, letterSpacing: '0.04em' }}>{portionLabel(row.amount)}×</span>
                 )}
@@ -2437,17 +2467,37 @@ function App() {
   const [browseOpen, setBrowseOpen] = useState(false);
   const [pendingDrink, setPendingDrink] = useState(null);
   const now = useLiveNow();
+  const [undo, setUndo] = useState(null);
+  useEffect(() => {
+    if (!undo) return;
+    const timer = setTimeout(() => setUndo(null), 8000);
+    return () => clearTimeout(timer);
+  }, [undo]);
+  useEffect(() => {
+    const onKey = e => {
+      if (e.key === 'Escape') {
+        if (pendingDrink !== null) setPendingDrink(null);
+        else setBrowseOpen(false);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [pendingDrink]);
 
-  const addEntry = (drinkId, amount = 1) => {
+  const addEntry = (drinkId, amount = 1, blend = null) => {
     const d = DRINK_BY_ID[drinkId];
-    const next = [...entries, { id: 'e' + Date.now(), drink: drinkId, amount, mg: Math.round(d.mg * amount), kcal: Math.round(d.kcal * amount), time: Date.now() }];
+    const next = [...entries, { id: 'e' + Date.now(), drink: drinkId, amount, name: blend?.name, mg: blend?.mg ?? Math.round(d.mg * amount), kcal: blend?.kcal ?? Math.round(d.kcal * amount), time: Date.now() }];
     setEntries(next); saveEntries(next);
   };
   const removeEntry = id => {
+    const row = entries.find(e => e.id === id);
+    if (!row) return;
+    setUndo({ kind: 'drink', row });
     const next = entries.filter(e => e.id !== id);
     setEntries(next); saveEntries(next);
   };
   const updateEntryTime = (id, timeStr) => {
+    if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(timeStr)) return;
     const [h, m] = timeStr.split(':').map(Number);
     const d = new Date(); d.setHours(h, m, 0, 0);
     const next = entries.map(e => e.id === id ? { ...e, time: d.getTime() } : e);
@@ -2464,10 +2514,14 @@ function App() {
     return rec;
   };
   const removeWater = id => {
+    const row = waters.find(w => w.id === id);
+    if (!row) return;
+    setUndo({ kind: 'water', row });
     const next = waters.filter(w => w.id !== id);
     setWaters(next); saveWaters(next);
   };
   const updateWaterTime = (id, timeStr) => {
+    if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(timeStr)) return;
     const [h, m] = timeStr.split(':').map(Number);
     const d = new Date(); d.setHours(h, m, 0, 0);
     const next = waters.map(w => w.id === id ? { ...w, time: d.getTime() } : w);
@@ -2479,6 +2533,21 @@ function App() {
   return (
     <>
       {isDesktop ? <DesktopApp {...shared} /> : <MobileApp {...shared} />}
+      <div role="status" aria-live="polite" style={{ position: 'fixed', bottom: 'max(20px, env(safe-area-inset-bottom))', left: '50%', transform: 'translateX(-50%)', zIndex: 70, maxWidth: 'calc(100vw - 32px)', width: 'max-content' }}>
+        {undo && <div style={{ display: 'flex', alignItems: 'center', gap: 20, padding: '12px 18px', background: T.sheetBg, border: T.coachBorder, borderRadius: 8, boxShadow: 'var(--shadow-soft)', fontSize: 13 }}>
+          <span>{undo.kind === 'water' ? 'Water' : undo.row.name || DRINK_BY_ID[undo.row.drink].name} removed</span>
+          <button onClick={() => {
+            if (undo.kind === 'water') {
+              const next = [...waters, undo.row].sort((a, b) => a.time - b.time);
+              setWaters(next); saveWaters(next);
+            } else {
+              const next = [...entries, undo.row].sort((a, b) => a.time - b.time);
+              setEntries(next); saveEntries(next);
+            }
+            setUndo(null);
+          }} style={{ background: 'none', border: 'none', color: T.accent, fontFamily: T.fontMono, fontWeight: 600, cursor: 'pointer', padding: '8px 0' }}>Undo</button>
+        </div>}
+      </div>
       <Browse open={browseOpen} onClose={() => setBrowseOpen(false)} onPick={setPendingDrink} isDesktop={isDesktop} />
       <AmountPicker open={pendingDrink !== null} drinkId={pendingDrink} onClose={() => setPendingDrink(null)} onConfirm={addEntry} isDesktop={isDesktop} />
     </>

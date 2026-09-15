@@ -27,3 +27,6 @@ yarn-error.log*
 # Build output
 dist/
 build/
+
+#Continue
+.continue/*
