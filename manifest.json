@@ -1,13 +1,13 @@
 {
-  "name": "Kaffeavhengig",
+  "name": "Kaffe — a little coffee journal",
   "short_name": "Kaffe",
-  "description": "Caffeine intake tracker with real-time half-life decay.",
+  "description": "A playful coffee journal with caffeine tracking, water breaks, sleep forecasts, and a Blend Lab.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
   "orientation": "portrait",
-  "background_color": "#13110e",
-  "theme_color": "#13110e",
+  "background_color": "#f7f4ec",
+  "theme_color": "#f7f4ec",
   "lang": "en",
   "icons": [
     {

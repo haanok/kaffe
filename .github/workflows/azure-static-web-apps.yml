@@ -1,25 +1,81 @@
-name: Deploy to Azure Static Web Apps
+name: Test and deploy Kaffe
 
 on:
   push:
-    branches:
-      - main
+    branches: [main]
   pull_request:
     types: [opened, synchronize, reopened, closed]
-    branches:
-      - main
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: kaffe-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  build_and_deploy:
+  test:
+    if: github.event_name == 'push' || github.event.action != 'closed'
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium webkit
+      - run: npm test
+      - run: npm run test:browser
+      - run: npm run package:site
+      - uses: actions/upload-artifact@v4
+        with:
+          name: kaffe-site
+          path: dist/
+          retention-days: 7
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: browser-screenshots
+          path: test-results/
+          if-no-files-found: ignore
+          retention-days: 7
 
-      - name: Deploy to Azure Static Web Apps
+  deploy:
+    needs: test
+    # Fork PRs get tests but never deployment credentials.
+    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: kaffe-site
+          path: dist/
+      - name: Deploy production or isolated PR preview
         uses: Azure/static-web-apps-deploy@v1
         with:
           azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN }}
           repo_token: ${{ secrets.GITHUB_TOKEN }}
-          action: "upload"
-          app_location: "/"        # Root of your app (where index.html is)
-          output_location: ""      # Leave empty if no build step
+          action: upload
+          app_location: dist
+          output_location: ''
+          skip_app_build: true
+          skip_api_build: true
+          production_branch: main
+
+  close_preview:
+    if: github.event_name == 'pull_request' && github.event.action == 'closed' && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Remove closed PR preview
+        uses: Azure/static-web-apps-deploy@v1
+        with:
+          azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN }}
+          action: close

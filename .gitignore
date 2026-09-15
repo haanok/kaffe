@@ -24,6 +24,10 @@ yarn-error.log*
 .env.*
 !.env.example
 
+# Generated test output
+test-results/
+playwright-report/
+
 # Build output
 dist/
 build/

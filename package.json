@@ -1,0 +1,17 @@
+{
+  "name": "kaffe-journal",
+  "version": "2.0.0",
+  "private": true,
+  "type": "module",
+  "description": "A local-first coffee journal. No runtime dependencies or build step.",
+  "scripts": {
+    "start": "node scripts/serve.mjs",
+    "test": "node --test tests/model.test.js",
+    "test:browser": "node tests/browser.test.js",
+    "package:site": "node scripts/package.mjs"
+  },
+  "devDependencies": {
+    "@axe-core/playwright": "4.11.1",
+    "playwright": "1.63.0"
+  }
+}
