@@ -23,6 +23,7 @@ const icons = {
   sound: '<path d="m11 4-6 5H2v6h3l6 5Zm4 4a6 6 0 0 1 0 8m3-11a10 10 0 0 1 0 14"/>',
   mute: '<path d="m11 4-6 5H2v6h3l6 5Zm5 5 6 6m-6 0 6-6"/>',
   arrow: '<path d="M5 12h14m-6-6 6 6-6 6"/>', trash: '<path d="M3 6h18M9 6V3h6v3M6 6l1 15h10l1-15M10 10v7m4-7v7"/>',
+  energy: '<path d="M13 2 5 13h5l-1 9 8-11h-5l1-9Z"/>',
   edit: '<path d="m15 4 5 5M4 20l5-1L21 7l-5-5L4 14Z"/>',
   shuffle: '<path d="m3 5 4 0 10 14h4m-4-4 4 4-4 4M3 19h4L17 5h4m-4-4 4 4-4 4"/>',
   download: '<path d="M12 3v12m-5-5 5 5 5-5M4 16v5h16v-5"/>',
@@ -31,7 +32,10 @@ const icon = name => `<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="
 function cup(cat = 'coffee', large = false) {
   const colors = { coffee: '#df775e', tea: '#9db676', energy: '#b6a4d9', soda: '#eebf58', supp: '#9ebccc', sweets: '#c9967d', water: '#8ec3dc' };
   const color = colors[cat] || colors.coffee;
-  return `<svg class="cup-art ${large ? 'large' : ''}" viewBox="0 0 150 140" aria-hidden="true"><ellipse cx="77" cy="123" rx="53" ry="7" fill="#342921" opacity=".09"/><g class="steam" fill="none" stroke="currentColor" stroke-width="3" opacity=".5"><path d="M55 32c-12-12 12-14 0-26M78 28c-12-12 12-14 0-26M100 32c-12-12 12-14 0-26"/></g><path d="M111 57h9c26 0 23 38-6 38h-8" fill="none" stroke="#342921" stroke-width="13"/><path d="M111 57h9c26 0 23 38-6 38h-8" fill="none" stroke="${color}" stroke-width="8"/><path d="M32 45h80l-5 51c-2 28-67 28-70 0Z" fill="${color}" stroke="#342921" stroke-width="3"/><ellipse cx="72" cy="45" rx="40" ry="9" fill="#fff0d8" stroke="#342921" stroke-width="3"/><ellipse cx="72" cy="46" rx="31" ry="5" fill="${cat === 'tea' ? '#6b813e' : cat === 'water' ? '#b6e1ed' : '#78442c'}"/><path d="M48 66v20" stroke="#fff" stroke-width="5" stroke-linecap="round" opacity=".35"/><circle cx="64" cy="81" r="2.5" fill="#342921"/><circle cx="86" cy="81" r="2.5" fill="#342921"/><path d="M69 92q6 7 12 0" fill="none" stroke="#342921" stroke-width="2.5" stroke-linecap="round"/></svg>`;
+  const art = cat === 'energy'
+    ? `<path d="M46 50h60v50c0 20-12 23-30 23s-30-3-30-23Z" fill="${color}" stroke="#342921" stroke-width="3"/><ellipse cx="76" cy="50" rx="30" ry="6" fill="#e6d9f4" stroke="#342921" stroke-width="3"/><g transform="translate(60 61) scale(1.45)"><path d="M13 2 5 13h5l-1 9 8-11h-5l1-9Z" fill="#fff" stroke="#342921" stroke-width="1.7" stroke-linejoin="round"/></g><path d="M55 66v26" stroke="#fff" stroke-width="5" stroke-linecap="round" opacity=".35"/>`
+    : `<g class="steam" fill="none" stroke="currentColor" stroke-width="3" opacity=".5"><path d="M55 32c-12-12 12-14 0-26M78 28c-12-12 12-14 0-26M100 32c-12-12 12-14 0-26"/></g><path d="M111 57h9c26 0 23 38-6 38h-8" fill="none" stroke="#342921" stroke-width="13"/><path d="M111 57h9c26 0 23 38-6 38h-8" fill="none" stroke="${color}" stroke-width="8"/><path d="M32 45h80l-5 51c-2 28-67 28-70 0Z" fill="${color}" stroke="#342921" stroke-width="3"/><ellipse cx="72" cy="45" rx="40" ry="9" fill="#fff0d8" stroke="#342921" stroke-width="3"/><ellipse cx="72" cy="46" rx="31" ry="5" fill="${cat === 'tea' ? '#6b813e' : cat === 'water' ? '#b6e1ed' : '#78442c'}"/><path d="M48 66v20" stroke="#fff" stroke-width="5" stroke-linecap="round" opacity=".35"/><circle cx="64" cy="81" r="2.5" fill="#342921"/><circle cx="86" cy="81" r="2.5" fill="#342921"/><path d="M69 92q6 7 12 0" fill="none" stroke="#342921" stroke-width="2.5" stroke-linecap="round"/>`;
+  return `<svg class="cup-art ${large ? 'large' : ''}" viewBox="0 0 150 140" aria-hidden="true"><ellipse cx="77" cy="123" rx="53" ry="7" fill="#342921" opacity=".09"/>${art}</svg>`;
 }
 function persist() {
   if (loaded.blocked) { warning = 'Saving paused to protect unreadable data. Export your backup before resetting browser storage.'; return; }
@@ -95,7 +99,7 @@ function decayChart(now, endTime) {
 function entryList(entries) {
   const bonuses = waterBonuses(state.entries);
   if (!entries.length) return `<div class="empty-state">${icon('cup')}<div><h3>No sips on this page. Yet.</h3><p>Log a drink or a glass of water and make yourself at home.</p></div></div>`;
-  return `<div class="entry-list">${[...entries].sort((a, b) => b.time - a.time).map(e => `<article class="entry"><div class="entry-icon ${esc(e.cat)}">${icon(e.kind === 'water' ? 'water' : 'cup')}</div><div class="entry-name"><strong>${esc(e.name)}</strong><span>${e.kind === 'water' ? `1 glass · ${bonuses.has(e.id) ? '2 points · post-caffeine bonus' : '1 point'}` : `${e.amount}× serving · ${e.kcal} kcal`}</span></div><button class="entry-time" data-action="edit" data-id="${esc(e.id)}" aria-label="Edit time for ${esc(e.name)} at ${fmtTime(e.time)}">${fmtTime(e.time)}${icon('edit')}</button><strong class="entry-mg">${e.kind === 'water' ? '—' : `${e.mg}<small> mg</small>`}</strong><button class="icon-button delete-button" data-action="delete" data-id="${esc(e.id)}" aria-label="Delete ${esc(e.name)} at ${fmtTime(e.time)}">${icon('trash')}</button></article>`).join('')}</div>`;
+  return `<div class="entry-list">${[...entries].sort((a, b) => b.time - a.time).map(e => `<article class="entry"><div class="entry-icon ${esc(e.cat)}">${icon(e.kind === 'water' ? 'water' : e.cat === 'energy' ? 'energy' : 'cup')}</div><div class="entry-name"><strong>${esc(e.name)}</strong><span>${e.kind === 'water' ? `1 glass · ${bonuses.has(e.id) ? '2 points · post-caffeine bonus' : '1 point'}` : `${e.amount}× ${portionName(e.cat)}${e.amount === 1 ? '' : 's'} · ${e.kcal} kcal`}</span></div><button class="entry-time" data-action="edit" data-id="${esc(e.id)}" aria-label="Edit time for ${esc(e.name)} at ${fmtTime(e.time)}">${fmtTime(e.time)}${icon('edit')}</button><strong class="entry-mg">${e.kind === 'water' ? '—' : `${e.mg}<small> mg</small>`}</strong><button class="icon-button delete-button" data-action="delete" data-id="${esc(e.id)}" aria-label="Delete ${esc(e.name)} at ${fmtTime(e.time)}">${icon('trash')}</button></article>`).join('')}</div>`;
 }
 function historyView() {
   const days = historyDays(state.entries, historyRange), total = days.reduce((s, d) => s + d.mg, 0), count = days.reduce((s, d) => s + d.drinks, 0);
@@ -117,7 +121,7 @@ function labView() {
 }
 function catalogMarkup() {
   const results = DRINKS.filter(d => (modalCategory === 'all' || d.cat === modalCategory) && `${d.name} ${d.cat}`.toLowerCase().includes(modalQuery.toLowerCase()));
-  return `<div class="catalog-results">${results.length ? results.map(d => `<button class="catalog-drink" data-action="choose" data-id="${d.id}"><span class="entry-icon ${d.cat}">${icon('cup')}</span><span><strong>${d.name}</strong><small>${d.serving} · ${d.kcal} kcal</small></span><b>${d.mg}<small> mg</small></b>${icon('plus')}</button>`).join('') : '<p class="empty-search">No matching drinks. Try another name or category.</p>'}</div>`;
+  return `<div class="catalog-results">${results.length ? results.map(d => `<button class="catalog-drink" data-action="choose" data-id="${d.id}"><span class="entry-icon ${d.cat}">${icon(d.cat === 'energy' ? 'energy' : 'cup')}</span><span><strong>${d.name}</strong><small>${d.serving} · ${d.kcal} kcal</small></span><b>${d.mg}<small> mg</small></b>${icon('plus')}</button>`).join('') : '<p class="empty-search">No matching drinks. Try another name or category.</p>'}</div>`;
 }
 function openCatalog() {
   modalQuery = ''; modalCategory = 'all';
@@ -125,18 +129,22 @@ function openCatalog() {
   showDialog(); $('#drink-search').focus();
 }
 function showDialog() { if (!picker.open) picker.showModal(); }
+// Portions are discrete: whole cups (or cans for canned drinks), in halves.
+const portionName = cat => ['energy', 'soda'].includes(cat) ? 'can' : 'cup';
+const portionLabel = (n, cat) => `${({ 0.5: '½', 1.5: '1½' })[n] || n}×`;
 function chooseDrink(drink) {
   modalDrink = drink; modalAmount = 1;
-  picker.innerHTML = `<div class="dialog-heading"><div><p class="eyebrow">MAKE IT YOURS</p><h2 id="picker-title">${esc(drink.name)}</h2></div><button class="icon-button" data-action="close" aria-label="Close amount picker">${icon('close')}</button></div><form id="log-form"><div class="amount-hero">${cup(drink.cat)}<div><strong id="amount-mg">${drink.mg}<small> mg</small></strong><p><span id="amount-kcal">${drink.kcal}</span> kcal · per <span id="amount-multiplier">1</span>× serving</p><span class="muted">Standard serving: ${esc(drink.serving || '1 blend')}</span></div></div><div class="section-heading"><label for="amount">Serving size</label><output id="amount-label" for="amount">1×</output></div><input type="range" id="amount" min="0.1" max="3" step="0.05" value="1"><div class="amount-presets">${[.25, .5, .75, 1, 1.5, 2].map(n => `<button type="button" data-action="amount-preset" data-value="${n}" class="chip ${n === 1 ? 'selected' : ''}" aria-pressed="${n === 1}">${n}×</button>`).join('')}</div><div class="form-grid"><label>Date<input type="date" id="log-date" value="${dayKey()}" max="${dayKey()}" required></label><label>Time<input type="time" id="log-time" value="${timeValue()}" required></label></div><p id="form-error" class="form-error" role="alert"></p><button class="button primary full-width" type="submit">${icon('plus')}Add to my journal</button><button type="button" class="text-button back-catalog" data-action="catalog">Back to all drinks</button></form>`;
-  showDialog(); $('#amount').focus();
+  const unit = portionName(drink.cat);
+  picker.innerHTML = `<div class="dialog-heading"><div><p class="eyebrow">MAKE IT YOURS</p><h2 id="picker-title">${esc(drink.name)}</h2></div><button class="icon-button" data-action="close" aria-label="Close amount picker">${icon('close')}</button></div><form id="log-form"><div class="amount-hero">${cup(drink.cat)}<div><strong id="amount-mg">${drink.mg}<small> mg</small></strong><p><span id="amount-kcal">${drink.kcal}</span> kcal · per ${esc(drink.serving || '1 blend')}</p><span class="muted" id="amount-label">1 ${unit} · ${drink.mg} mg</span></div></div><div class="section-heading"><span class="eyebrow">HOW MUCH?</span></div><div class="amount-presets">${[.5, 1, 1.5, 2].map(n => `<button type="button" data-action="amount-preset" data-value="${n}" class="chip ${n === 1 ? 'selected' : ''}" aria-pressed="${n === 1}">${portionLabel(n, drink.cat)}</button>`).join('')}</div><div class="form-grid"><label>Date<input type="date" id="log-date" value="${dayKey()}" max="${dayKey()}" required></label><label>Time<input type="time" id="log-time" value="${timeValue()}" required></label></div><p id="form-error" class="form-error" role="alert"></p><button class="button primary full-width" type="submit">${icon('plus')}Add to my journal</button><button type="button" class="text-button back-catalog" data-action="catalog">Back to all drinks</button></form>`;
+  showDialog(); $('#log-date').focus();
 }
 function updateAmount(n) {
-  modalAmount = Math.max(.1, Math.min(3, n));
-  $('#amount').value = modalAmount;
+  modalAmount = [0.5, 1, 1.5, 2].includes(n) ? n : 1;
+  const unit = portionName(modalDrink.cat);
+  const summary = `${({ 0.5: '½', 1.5: '1½' })[modalAmount] || modalAmount} ${unit}${modalAmount === 1 ? '' : 's'}`;
   $('#amount-mg').innerHTML = `${Math.round(modalDrink.mg * modalAmount)}<small> mg</small>`;
   $('#amount-kcal').textContent = Math.round(modalDrink.kcal * modalAmount);
-  $('#amount-multiplier').textContent = modalAmount;
-  $('#amount-label').textContent = `${modalAmount}×`;
+  $('#amount-label').textContent = `${summary} · ${Math.round(modalDrink.mg * modalAmount)} mg`;
   picker.querySelectorAll('[data-action="amount-preset"]').forEach(b => { const selected = +b.dataset.value === modalAmount; b.classList.toggle('selected', selected); b.setAttribute('aria-pressed', selected); });
 }
 function editEntry(id) {
@@ -217,7 +225,6 @@ document.addEventListener('click', event => {
 });
 document.addEventListener('input', event => {
   if (event.target.id === 'drink-search') { modalQuery = event.target.value; $('#catalog-list').innerHTML = catalogMarkup(); }
-  if (event.target.id === 'amount') updateAmount(+event.target.value);
 });
 document.addEventListener('change', event => {
   const { id, value } = event.target;
@@ -233,7 +240,7 @@ picker.addEventListener('submit', event => {
   event.preventDefault(); const time = formTime(); if (time === null) return;
   if (event.target.id === 'log-form') {
     state.entries.push(makeDrink(modalDrink, modalAmount, time));
-    picker.close(); commit(`${modalDrink.name} logged. ${Math.round(modalDrink.mg * modalAmount)} mg, noted.`);
+    picker.close(); commit(`${modalDrink.name} logged. ${Math.round(modalDrink.mg * modalAmount)} mg · ${modalAmount} ${portionName(modalDrink.cat)}${modalAmount === 1 ? '' : 's'}, noted.`);
   } else if (event.target.id === 'edit-form') {
     const entry = state.entries.find(e => e.id === event.target.dataset.id);
     if (entry) entry.time = time;

@@ -1,6 +1,6 @@
 // Bump this version whenever the app shell changes. All runtime dependencies
 // are local, and a complete shell is installed before an update can activate.
-const CACHE_NAME = 'kaffe-journal-v11';
+const CACHE_NAME = 'kaffe-journal-v13';
 const SHELL = ['./', './index.html', './styles.css', './app.js', './model.js', './data.js', './manifest.json', './icon.svg'];
 const shellURLs = new Set(SHELL.map(path => new URL(path, self.registration.scope).href));
 

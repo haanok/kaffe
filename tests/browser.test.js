@@ -34,7 +34,7 @@ try {
     await accessibility(page, `${engineName} today light`);
     await page.screenshot({ path: `test-results/${engineName}-today-empty.png`, fullPage: true });
     await page.getByRole('button', { name: 'Log Drip coffee', exact: true }).click();
-    await page.getByRole('button', { name: '1.5×', exact: true }).click();
+    await page.getByRole('button', { name: '1½×', exact: true }).click();
     assert.match(await page.locator('#amount-mg').innerText(), /143/);
     await page.getByRole('button', { name: 'Add to my journal' }).click();
     assert.equal((await journal(page)).entries[0].mg, 143);
