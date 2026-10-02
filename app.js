@@ -1,4 +1,5 @@
 import { CATEGORIES, DRINKS, DRINK_BY_ID, QUICK, INGREDIENTS, ING_BY_ID, RECIPES, MAX_LAYERS, blendKey, matchRecipe, blendTotals } from './data.js';
+import { pourDrink, pourWater, isPouring } from './pour.js';
 import { STORE_KEY, HOUR, uid, dayKey, timeValue, validTime, fmtTime, nextBedtime, activeAt, timeBelow, onDay, sumMg, sumKcal, historyDays, waterBonuses, loadState, makeDrink } from './model.js';
 
 const $ = selector => document.querySelector(selector);
@@ -54,6 +55,23 @@ function tick() {
     oscillator.connect(gain).connect(audio.destination); oscillator.start(); oscillator.stop(audio.currentTime + .13);
   } catch { /* Sound is optional. */ }
 }
+// Opt-in only: soft bubble "glugs" for a pour, a single plink for water.
+function glug(kind) {
+  if (!state.settings.sound) return;
+  try {
+    audio ||= new (window.AudioContext || window.webkitAudioContext)();
+    void audio.resume();
+    const notes = kind === 'water' ? [[0, 760, 1250]] : [[0, 230, 480], [.09, 260, 540], [.2, 210, 450]];
+    notes.forEach(([at, low, high]) => {
+      const t = audio.currentTime + at, oscillator = audio.createOscillator(), gain = audio.createGain();
+      oscillator.type = 'sine'; oscillator.frequency.setValueAtTime(low * (.94 + Math.random() * .12), t);
+      oscillator.frequency.exponentialRampToValueAtTime(high, t + .07);
+      gain.gain.setValueAtTime(.0001, t); gain.gain.exponentialRampToValueAtTime(.05, t + .012); gain.gain.exponentialRampToValueAtTime(.0001, t + .1);
+      oscillator.connect(gain).connect(audio.destination); oscillator.start(t); oscillator.stop(t + .11);
+    });
+  } catch { /* Sound is optional. */ }
+}
+const todayFigures = () => ({ total: sumMg(onDay(state.entries)), active: activeAt(state.entries, Date.now(), state.settings.halfLife) });
 function notify(message, canUndo = false) {
   clearTimeout(toastTimer);
   $('#toast').innerHTML = `<span>${esc(message)}</span>${canUndo ? '<button data-action="undo">Undo</button>' : ''}`;
@@ -194,8 +212,9 @@ document.addEventListener('click', event => {
     case 'amount-preset': updateAmount(+d.value); break;
     case 'water': {
       const entry = { id: uid(), kind: 'water', drink: null, name: 'Water', cat: 'water', amount: 1, mg: 0, kcal: 0, time: Date.now() };
+      const from = button.getBoundingClientRect(), before = onDay(state.entries).filter(e => e.kind === 'water').length;
       state.entries.push(entry); commit(waterBonuses(state.entries).has(entry.id) ? 'Water logged. +2 hydration points!' : 'Water logged. A little reset.');
-      $('.water-glass')?.classList.add('splashed'); break;
+      pourWater({ from, before, sound: glug }); break;
     }
     case 'delete': {
       const index = state.entries.findIndex(e => e.id === d.id); if (index < 0) break;
@@ -239,8 +258,11 @@ document.addEventListener('keydown', event => {
 picker.addEventListener('submit', event => {
   event.preventDefault(); const time = formTime(); if (time === null) return;
   if (event.target.id === 'log-form') {
+    const cupArt = picker.querySelector('.amount-hero .cup-art');
+    const flight = view === 'today' && cupArt ? { from: cupArt.getBoundingClientRect(), svg: cupArt.outerHTML, cat: modalDrink.cat, before: todayFigures() } : null;
     state.entries.push(makeDrink(modalDrink, modalAmount, time));
     picker.close(); commit(`${modalDrink.name} logged. ${Math.round(modalDrink.mg * modalAmount)} mg · ${modalAmount} ${portionName(modalDrink.cat)}${modalAmount === 1 ? '' : 's'}, noted.`);
+    if (flight) pourDrink({ ...flight, after: todayFigures(), sound: glug });
   } else if (event.target.id === 'edit-form') {
     const entry = state.entries.find(e => e.id === event.target.dataset.id);
     if (entry) entry.time = time;
@@ -269,7 +291,7 @@ window.addEventListener('storage', event => {
 });
 setInterval(() => {
   // Preserve the focused control during live updates and local-midnight rollover.
-  if (!picker.open && document.activeElement?.tagName !== 'INPUT' && view !== 'lab') {
+  if (!picker.open && !isPouring() && document.activeElement?.tagName !== 'INPUT' && view !== 'lab') {
     const focused = document.activeElement;
     const action = focused?.dataset?.action, id = focused?.dataset?.id;
     render();
