@@ -26,7 +26,9 @@ jobs:
           node-version: 20
 
       - name: Package site
-        run: npm run package:site
+        run: |
+          npm run package:site
+          cd api && npm install
         
       - name: Build And Deploy
         id: builddeploy
