@@ -11,3 +11,17 @@ dialog{background:var(--paper);color:var(--ink);border:1px solid var(--line);bor
 @media(max-width:350px){main{padding-left:12px;padding-right:12px}.header-date{display:none}.daily-card{grid-template-columns:1fr 95px;padding-left:20px;padding-right:20px}.cup-art.large{width:105px}.hero-art{margin-left:-8px}.big-number{font-size:65px}.entry{gap:6px}.entry-name strong{font-size:10px}.entry-name>span{font-size:7px}.entry-time{font-size:8px}.entry-mg{min-width:39px;font-size:11px}.delete-button{width:22px}.bedtime-input input{width:155px;font-size:25px}.moon-art{width:105px;transform:scale(.6)}.lab-layout{grid-template-columns:1fr;gap:17px}.pantry{padding:20px}.ingredient-grid{grid-template-columns:repeat(3,1fr)}.ingredient>strong{font-size:10px}.ingredient>span:last-child{font-size:8px}.mixing-card{position:static;padding:23px}.blend-cup{width:145px;height:190px;margin-right:auto}.blend-layer{font-size:9px}.blend-saucer{width:200px}.mixing-card>h2{font-size:24px}.blend-tagline{font-size:11px;min-height:0}.blend-totals span{font-size:10px}.layer-count{font-size:9px}.mixing-card .button{font-size:12px}.surprise{font-size:11px}}
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
 @media print{.sidebar,.page-footer,.utility,.button,.text-button,.delete-button,.quick-section,.toast,dialog{display:none!important}main{margin:0;padding:0}.app-shell{min-height:0}body{background:#fff;color:#000}.card{box-shadow:none;break-inside:avoid}.entry-list{break-inside:avoid}}
+.intake-track{height:12px;background:#8b593521;box-shadow:inset 0 1px 2px #47342514}
+.intake-track>span{position:relative;background-image:linear-gradient(#ffffff40,#ffffff00 55%);transition:width .7s cubic-bezier(.2,.8,.2,1),background-color .45s ease}
+.pour-flyer{position:fixed;left:0;top:0;z-index:60;pointer-events:none;will-change:transform;filter:drop-shadow(0 10px 14px #47342526)}
+.pour-flyer .cup-art{width:100%;height:100%;display:block}
+.pour-stream{position:fixed;z-index:59;width:5px;border-radius:3px;transform-origin:top;pointer-events:none;transform:scaleY(0)}
+.pour-drop{position:fixed;z-index:61;border-radius:50%;pointer-events:none}
+.pour-drop.water{border-radius:50% 50% 50% 50%/60% 60% 40% 40%}
+.odo{display:inline-block;height:1lh;overflow:clip;vertical-align:top;white-space:nowrap}
+.odo-col{display:inline-block;height:1lh;overflow:clip;vertical-align:top}
+.odo-strip{display:block;will-change:transform}
+.odo-strip>span{display:block;height:1lh}
+.big-number,.active-number,.water-glass>span{font-variant-numeric:tabular-nums}
+.big-number,.active-number{white-space:nowrap}
+.big-number>.odo,.active-number>.odo{font-size:1em;letter-spacing:inherit;font-weight:inherit;margin:0;color:inherit}
