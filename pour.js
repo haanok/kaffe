@@ -50,13 +50,38 @@ function roll(el, from, to, delay = 0) {
   return Promise.all(rolls).then(() => { if (odo.isConnected) { odo.replaceWith(document.createTextNode(target)); label.remove(); } });
 }
 
+// One strong beat when a drink lands, so the new total is felt, not just read.
+function thump() {
+  const el = document.querySelector('.pulse');
+  if (!el || document.documentElement.dataset.pulse === 'off') return;
+  el.animate([{ scale: 1.06, filter: 'saturate(1.6) brightness(1.15)' }, { scale: 1, filter: 'none' }], { duration: 650, easing: 'cubic-bezier(.16,1,.3,1)' });
+  // Ultra: the impact shakes the whole page once.
+  if (document.documentElement.dataset.fx === 'ultra') {
+    const a = 3 + 5 * Number(getComputedStyle(document.documentElement).getPropertyValue('--buzz') || 0);
+    document.querySelector('.app-shell')?.animate([0, -a, a * .8, -a * .6, a * .4, -a * .2, 0].map((x, i) => ({ translate: `${x}px ${i % 2 ? a * .3 : -a * .2}px` })), { duration: 420, easing: 'linear' });
+  }
+}
+
+// Shared with other views: roll a rendered number up from its previous value.
+export const rollTo = (el, from, to, delay) => prefersReduced() ? Promise.resolve() : roll(el, from, to, delay);
+
+// Effects live in one layer anchored to the document, not the viewport, so a
+// pour or splash stays glued to the card when the page scrolls mid-animation.
+function layer() {
+  let el = document.querySelector('.pour-layer');
+  if (!el) { el = document.createElement('div'); el.className = 'pour-layer'; el.setAttribute('aria-hidden', 'true'); document.body.append(el); }
+  el.style.height = `${document.documentElement.scrollHeight}px`;
+  return el;
+}
+const docRect = el => { const r = el.getBoundingClientRect(); return { left: r.left + scrollX, right: r.right + scrollX, top: r.top + scrollY, bottom: r.bottom + scrollY, width: r.width, height: r.height }; };
+
 function droplets(x, y, color, count = 6) {
   for (let i = 0; i < count; i++) {
     const drop = document.createElement('span');
     const size = 4 + Math.random() * 4, dx = (Math.random() - .5) * 70, lift = 14 + Math.random() * 26;
     drop.className = 'pour-drop';
     Object.assign(drop.style, { width: `${size}px`, height: `${size}px`, left: `${x - size / 2}px`, top: `${y - size / 2}px`, background: color });
-    document.body.append(drop);
+    layer().append(drop);
     drop.animate([
       { transform: 'translate(0,0) scale(1)', opacity: 1 },
       { transform: `translate(${dx * .55}px, ${-lift}px) scale(1)`, opacity: 1, offset: .4 },
@@ -79,7 +104,7 @@ function rotated(dx, dy, degrees) {
   return [dx * Math.cos(a) - dy * Math.sin(a), dx * Math.sin(a) + dy * Math.cos(a)];
 }
 
-export async function pourDrink({ from, svg, cat, before, after, sound }) {
+export async function pourDrink({ from, svg, cat, before, after, sound, pulse }) {
   const card = document.querySelector('.daily-card');
   const track = card?.querySelector('.intake-track'), fill = track?.firstElementChild;
   if (!card || !fill || !from || prefersReduced() || (before.total === after.total && Math.round(before.active) === Math.round(after.active))) return;
@@ -90,6 +115,7 @@ export async function pourDrink({ from, svg, cat, before, after, sound }) {
   const forecast = document.querySelector('.decay-chart .forecast'), nowDot = document.querySelector('.decay-chart .now-dot');
   // Rewind the freshly rendered card to its pre-log state.
   card.classList.remove('low', 'medium', 'high'); card.classList.add(moodFor(before.total));
+  pulse?.(before.total);
   fill.style.transition = 'none';
   fill.style.width = `${pct(before.total)}%`;
   const bigNode = big && [...big.childNodes].find(n => n.nodeType === 3), activeNode = activeNumber && [...activeNumber.childNodes].find(n => n.nodeType === 3);
@@ -105,18 +131,22 @@ export async function pourDrink({ from, svg, cat, before, after, sound }) {
   const place = (x, y, rotate = 0, scale = 1) => `translate(${x - size / 2}px, ${y - height / 2}px) rotate(${rotate}deg) scale(${scale})`;
   const startX = from.left + from.width / 2, startY = from.top + from.height / 2, startScale = from.width / size;
   flyer.style.transform = place(startX, startY, 0, startScale);
+  flyer.style.position = 'fixed';
   document.body.append(flyer);
   try {
     const lift = flyer.animate([{ transform: place(startX, startY, 0, startScale) }, { transform: place(startX, startY - 10, -4, startScale * 1.04) }], { duration: 240, easing: 'cubic-bezier(.2,.8,.2,1)', fill: 'forwards' });
     await Promise.all([bringIntoView(track), done(lift)]);
+    // The page is settled: move the cup into document space so manual
+    // scrolling from here on carries the whole pour along with the card.
+    flyer.style.position = ''; layer().append(flyer);
 
     // Aim the cup so its left rim sits above the meter's current edge.
-    const r = track.getBoundingClientRect();
+    const r = docRect(track);
     const landX = Math.min(r.right - 10, Math.max(r.left + 10, r.left + r.width * pct(before.total) / 100 + 6)), landY = r.top + r.height / 2;
     const tilt = -58, streamLength = Math.max(34, Math.min(54, size * .7));
     const [lipX, lipY] = rotated((.25 - .5) * size, (.37 - .5) * height, tilt);
     const cx = landX - lipX, cy = landY - streamLength - lipY;
-    const x0 = startX, y0 = startY - 10, ctrlX = (x0 + cx) / 2, ctrlY = Math.min(y0, cy) - Math.min(160, Math.abs(x0 - cx) * .35 + 70);
+    const x0 = startX + scrollX, y0 = startY - 10 + scrollY, ctrlX = (x0 + cx) / 2, ctrlY = Math.min(y0, cy) - Math.min(160, Math.abs(x0 - cx) * .35 + 70);
     const arc = Array.from({ length: 21 }, (_, i) => {
       const t = i / 20, u = 1 - t;
       const x = u * u * x0 + 2 * u * t * ctrlX + t * t * cx, y = u * u * y0 + 2 * u * t * ctrlY + t * t * cy;
@@ -130,11 +160,12 @@ export async function pourDrink({ from, svg, cat, before, after, sound }) {
     const stream = document.createElement('div');
     stream.className = 'pour-stream';
     Object.assign(stream.style, { left: `${landX - 2.5}px`, top: `${landY - streamLength}px`, height: `${streamLength}px`, background: liquid });
-    document.body.append(stream);
+    layer().append(stream);
     await done(stream.animate([{ transform: 'scaleY(0)' }, { transform: 'scaleY(1)' }], { duration: 170, easing: 'cubic-bezier(.55,0,1,.45)', fill: 'forwards' }));
     sound?.('pour');
     droplets(landX, landY, liquid);
     card.classList.remove('low', 'medium', 'high'); card.classList.add(moodFor(after.total));
+    pulse?.(after.total); thump();
     fill.style.width = `${pct(after.total)}%`;
     const filling = done(fill.animate([{ width: `${pct(before.total)}%` }, { width: `${pct(after.total)}%` }], { duration: SETTLE.duration, easing: SETTLE.easing }));
     const counting = Promise.all([roll(big, before.total, after.total, 60), roll(activeNumber, before.active, after.active, 220)]);
@@ -169,12 +200,12 @@ export async function pourWater({ from, before, sound }) {
   fill.style.transition = 'none';
   fill.style.height = `${level(before)}%`;
   if (count) count.textContent = before;
-  const g = glass.getBoundingClientRect();
+  const g = docRect(glass);
   const drop = document.createElement('span');
   drop.className = 'pour-drop water';
   const x = g.left + g.width / 2, startY = g.top - 34, endY = g.top + g.height * (1 - level(before) / 100) - 4;
   Object.assign(drop.style, { left: `${x - 6}px`, top: `${startY}px`, width: '12px', height: '16px', background: LIQUID.water });
-  document.body.append(drop);
+  layer().append(drop);
   try {
     await done(drop.animate([{ transform: 'translateY(0) scale(.6)', opacity: 0 }, { transform: 'translateY(0) scale(1)', opacity: 1, offset: .15 }, { transform: `translateY(${endY - startY}px) scale(.9, 1.15)`, opacity: 1 }],
       { duration: 420, easing: 'cubic-bezier(.55,0,1,.45)', fill: 'forwards' }));
