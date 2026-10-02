@@ -6,11 +6,14 @@ function getContainer() {
 }
 
 module.exports = async function (context, req) {
-  const principalHeader = req.headers["x-ms-client-principal"];
+  const principalHeader = req.headers["x-ms-client-principal"] || req.headers["X-MS-CLIENT-PRINCIPAL"];
   if (!principalHeader) { context.res = { status: 401, body: "Not authenticated" }; return; }
   const userId = JSON.parse(Buffer.from(principalHeader, "base64").toString("utf8")).userId;
 
-  const body = req.body;
+  let body = req.body;
+  if (typeof body === "string") {
+    try { body = JSON.parse(body); } catch {}
+  }
   if (!body || body.version !== 2 || !Array.isArray(body.entries)) {
     context.res = { status: 400, body: "Invalid journal data" }; return;
   }
@@ -20,7 +23,7 @@ module.exports = async function (context, req) {
     await getContainer().items.upsert(doc);
     context.res = { status: 200, body: doc };
   } catch (err) {
-    context.log.error(err);
-    context.res = { status: 500, body: "Could not save journal" };
+    context.log.error("Cosmos save error:", err);
+    context.res = { status: 500, body: `Could not save journal: ${err.message || err}` };
   }
 };
