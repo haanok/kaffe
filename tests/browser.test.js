@@ -101,6 +101,8 @@ try {
     await page.getByRole('button', { name: 'Add to my journal' }).click();
     assert.equal((await journal(page)).entries.at(-1).mg, 64);
     assert.equal((await journal(page)).entries.at(-1).kcal, 163);
+    assert.equal(new URL(page.url()).hash, '#today');
+    await route(page, 'lab');
     await page.getByRole('button', { name: 'Surprise me', exact: true }).click();
     assert.notEqual(await page.locator('.mixing-card>h2').innerText(), 'Latte');
     await page.getByRole('button', { name: 'Reset', exact: true }).click();
