@@ -8,6 +8,8 @@ let storage;
 try { storage = window.localStorage; } catch { storage = { getItem() { throw new Error('Storage unavailable'); } }; }
 const loaded = loadState(storage);
 const state = loaded.state;
+let authUser = null;
+let cloudSyncTimer = null;
 let warning = loaded.warning;
 let view = 'today', historyRange = 7, selectedDay = dayKey(), layers = [], ingredientCategory = 'All';
 let sleepEntrance = false, historyMotion = '', historyFigures = null, undo = null, toastTimer, modalDrink = null, modalAmount = 1, modalCategory = 'all', modalQuery = '', audio;
