@@ -302,6 +302,24 @@ function exportJournal() {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
   notify('Journal backup downloaded.');
 }
+
+async function initAuth() {
+  try {
+    const res = await fetch('/.auth/me');
+    const { clientPrincipal } = await res.json();
+    renderAuthStatus(clientPrincipal);
+  } catch {
+    // Auth check failed silently — app still works fully offline/local.
+  }
+}
+function renderAuthStatus(user) {
+  const el = $('#auth-status');
+  if (!el) return;
+  el.innerHTML = user
+    ? `<span class="auth-user">${esc(user.userDetails)}</span><a class="text-button" href="/.auth/logout">Sign out</a>`
+    : `<a class="text-button" href="/.auth/login/github">Sign in with GitHub</a>`;
+}
+
 document.addEventListener('click', event => {
   const button = event.target.closest('[data-action]'); if (!button || button.disabled) return;
   const d = button.dataset;
@@ -429,6 +447,7 @@ setInterval(() => {
 window.addEventListener('pageshow', () => { if (!picker.open) render(); });
 route();
 if (!warning) persist();
+initAuth();
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('./sw.js').catch(() => notify('Offline setup unavailable. The journal still works online.'));
 }
