@@ -13,5 +13,8 @@
   "devDependencies": {
     "@axe-core/playwright": "4.11.1",
     "playwright": "1.63.0"
+  },
+  "dependencies": {
+    "@azure/cosmos": "^4.10.1"
   }
 }

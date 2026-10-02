@@ -9,5 +9,17 @@
     ".js": "text/javascript",
     ".json": "application/json",
     ".svg": "image/svg+xml"
+  },
+  "routes": [
+    {
+      "route": "/api/*",
+      "allowedRoles": ["authenticated"]
+    }
+  ],
+  "responseOverrides": {
+    "401": {
+      "redirect": "/.auth/login/github",
+      "statusCode": 302
+    }
   }
 }
