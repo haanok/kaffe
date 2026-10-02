@@ -2,7 +2,7 @@ import { DRINK_BY_ID } from './data.js';
 
 export const STORE_KEY = 'kaffe-journal-v2';
 export const HOUR = 3600000;
-export const DEFAULT_SETTINGS = { theme: 'light', sound: false, bedtime: '23:00', halfLife: 5 };
+export const DEFAULT_SETTINGS = { theme: 'light', sound: false, bedtime: '23:00', halfLife: 5, pulse: 'on' };
 export const uid = () => globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 export function dayKey(time = Date.now()) {
   const d = new Date(time);
@@ -78,6 +78,10 @@ export function normalizeState(raw) {
   const settings = { ...DEFAULT_SETTINGS };
   if (['light', 'dark'].includes(raw.settings?.theme)) settings.theme = raw.settings.theme;
   if (typeof raw.settings?.sound === 'boolean') settings.sound = raw.settings.sound;
+  // 'off' | 'on' (heartbeat) | 'ultra'. Earlier builds stored a boolean switch.
+  const pulse = raw.settings?.pulse;
+  if (['off', 'on', 'ultra'].includes(pulse)) settings.pulse = pulse;
+  else if (typeof pulse === 'boolean') settings.pulse = pulse ? 'on' : 'off';
   if (validTime(raw.settings?.bedtime)) settings.bedtime = raw.settings.bedtime;
   if (Number.isFinite(raw.settings?.halfLife) && raw.settings.halfLife >= 3 && raw.settings.halfLife <= 8) settings.halfLife = raw.settings.halfLife;
   const entries = raw.entries.map(e => normalizeEntry(e)).filter(Boolean);
@@ -112,4 +116,20 @@ export function loadState(storage) {
 }
 export function makeDrink(drink, amount = 1, time = Date.now()) {
   return { id: uid(), kind: 'drink', drink: drink.id || null, name: drink.name, cat: drink.cat || 'coffee', amount, mg: Math.round(drink.mg * amount), kcal: Math.round(drink.kcal * amount), time };
+}
+// A rough personal starting point for the half-life setting, from average
+// effects reported for groups of people. Individuals vary widely; the UI must
+// present this as an estimate, never as a measurement or medical advice.
+export const HALF_LIFE_BASE = 5;
+export const HALF_LIFE_FACTORS = {
+  smoke: { yes: [0.6, 'Smoking or nicotine', 'faster'] },
+  hormonal: { yes: [1.8, 'Hormonal birth control', 'slower'] },
+  pregnancy: { t1: [1.3, 'Pregnancy, 1st trimester', 'slower'], t2: [1.8, 'Pregnancy, 2nd trimester', 'slower'], t3: [2.5, 'Pregnancy, 3rd trimester', 'slower'] },
+  meds: { yes: [2.5, 'A medication that slows caffeine clearance', 'much slower'] },
+};
+export function estimateHalfLife(answers = {}) {
+  const factors = Object.entries(HALF_LIFE_FACTORS).flatMap(([key, options]) => options[answers[key]] ? [{ key, multiplier: options[answers[key]][0], label: options[answers[key]][1], effect: options[answers[key]][2] }] : []);
+  const raw = factors.reduce((value, f) => value * f.multiplier, HALF_LIFE_BASE);
+  const value = Math.min(8, Math.max(3, Math.round(raw * 2) / 2));
+  return { value, raw, factors, capped: raw > 8 ? 'high' : raw < 3 ? 'low' : null };
 }

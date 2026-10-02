@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { DRINKS, DRINK_BY_ID, INGREDIENTS, RECIPES, matchRecipe, blendTotals } from '../data.js';
-import { STORE_KEY, HOUR, dayKey, validTime, nextBedtime, activeAt, timeBelow, onDay, historyDays, waterBonuses, normalizeState, loadState, makeDrink } from '../model.js';
+import { STORE_KEY, HOUR, dayKey, validTime, nextBedtime, activeAt, timeBelow, onDay, historyDays, waterBonuses, normalizeState, loadState, makeDrink, estimateHalfLife } from '../model.js';
 const at = new Date(2026, 8, 15, 12).getTime();
 const coffee = (mg = 100, time = at, id = 'coffee') => ({ id, kind: 'drink', drink: 'drip', name: 'Drip coffee', mg, kcal: 5, amount: 1, time });
 const water = (time, id) => ({ id, kind: 'water', time, mg: 0, kcal: 0 });
@@ -80,4 +80,23 @@ test('unreadable v2 is protected and unavailable storage does not crash', () => 
   const corrupt = loadState(storage({ [STORE_KEY]: '{broken' }));
   assert.equal(corrupt.blocked, true); assert.ok(corrupt.warning);
   assert.ok(loadState({ getItem() { throw new Error('denied'); } }).warning);
+});
+
+test('half-life estimate combines factors, rounds to the slider, and flags clamping', () => {
+  assert.equal(estimateHalfLife().value, 5);
+  assert.equal(estimateHalfLife({ smoke: 'yes' }).value, 3);
+  assert.equal(estimateHalfLife({ hormonal: 'yes' }).value, 8);
+  assert.equal(estimateHalfLife({ smoke: 'yes', hormonal: 'yes' }).value, 5.5);
+  assert.equal(estimateHalfLife({ pregnancy: 't1' }).value, 6.5);
+  assert.equal(estimateHalfLife({ pregnancy: 't3' }).capped, 'high');
+  assert.equal(estimateHalfLife({ meds: 'unsure', pregnancy: 'no' }).factors.length, 0);
+});
+
+test('caffeine effects default to heartbeat, persist all three modes, and migrate the old switch', () => {
+  const pulse = settings => normalizeState({ version: 2, entries: [], settings }).settings.pulse;
+  assert.equal(pulse({}), 'on');
+  for (const mode of ['off', 'on', 'ultra']) assert.equal(pulse({ pulse: mode }), mode);
+  assert.equal(pulse({ pulse: false }), 'off');
+  assert.equal(pulse({ pulse: true }), 'on');
+  assert.equal(pulse({ pulse: 'max' }), 'on');
 });
