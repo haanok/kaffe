@@ -10,13 +10,17 @@ module.exports = async function (context, req) {
   if (!principalHeader) { context.res = { status: 401, body: "Not authenticated" }; return; }
   const userId = JSON.parse(Buffer.from(principalHeader, "base64").toString("utf8")).userId;
 
+  const body = req.body;
+  if (!body || body.version !== 2 || !Array.isArray(body.entries)) {
+    context.res = { status: 400, body: "Invalid journal data" }; return;
+  }
+
+  const doc = { id: userId, userId, version: body.version, entries: body.entries, settings: body.settings, updatedAt: Date.now() };
   try {
-    const { resource } = await getContainer().item(userId, userId).read();
-    if (!resource) { context.res = { status: 404 }; return; }
-    context.res = { status: 200, headers: { "Content-Type": "application/json" }, body: resource };
+    await getContainer().items.upsert(doc);
+    context.res = { status: 200, body: doc };
   } catch (err) {
-    if (err.code === 404) { context.res = { status: 404 }; return; }
     context.log.error(err);
-    context.res = { status: 500, body: "Could not load journal" };
+    context.res = { status: 500, body: "Could not save journal" };
   }
 };

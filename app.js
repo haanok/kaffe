@@ -1,6 +1,6 @@
 import { CATEGORIES, DRINKS, DRINK_BY_ID, QUICK, INGREDIENTS, ING_BY_ID, RECIPES, MAX_LAYERS, blendKey, matchRecipe, blendTotals } from './data.js';
 import { pourDrink, pourWater, isPouring, rollTo } from './pour.js';
-import { STORE_KEY, HOUR, uid, dayKey, timeValue, validTime, fmtTime, nextBedtime, activeAt, timeBelow, onDay, sumMg, sumKcal, historyDays, waterBonuses, loadState, makeDrink, estimateHalfLife, HALF_LIFE_BASE } from './model.js';
+import { STORE_KEY, HOUR, uid, dayKey, timeValue, validTime, fmtTime, nextBedtime, activeAt, timeBelow, onDay, sumMg, sumKcal, historyDays, waterBonuses, loadState, makeDrink, estimateHalfLife, HALF_LIFE_BASE, fetchCloudState, saveCloudState } from './model.js';
 
 const $ = selector => document.querySelector(selector);
 const esc = value => String(value).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -39,11 +39,14 @@ function cup(cat = 'coffee', large = false) {
     : `<g class="steam" fill="none" stroke="currentColor" stroke-width="3" opacity=".5"><path d="M55 32c-12-12 12-14 0-26M78 28c-12-12 12-14 0-26M100 32c-12-12 12-14 0-26"/></g><path d="M111 57h9c26 0 23 38-6 38h-8" fill="none" stroke="#342921" stroke-width="13"/><path d="M111 57h9c26 0 23 38-6 38h-8" fill="none" stroke="${color}" stroke-width="8"/><path d="M32 45h80l-5 51c-2 28-67 28-70 0Z" fill="${color}" stroke="#342921" stroke-width="3"/><ellipse cx="72" cy="45" rx="40" ry="9" fill="#fff0d8" stroke="#342921" stroke-width="3"/><ellipse cx="72" cy="46" rx="31" ry="5" fill="${cat === 'tea' ? '#6b813e' : cat === 'water' ? '#b6e1ed' : '#78442c'}"/><path d="M48 66v20" stroke="#fff" stroke-width="5" stroke-linecap="round" opacity=".35"/><circle cx="64" cy="81" r="2.5" fill="#342921"/><circle cx="86" cy="81" r="2.5" fill="#342921"/><path d="M69 92q6 7 12 0" fill="none" stroke="#342921" stroke-width="2.5" stroke-linecap="round"/>`;
   return `<svg class="cup-art ${large ? 'large' : ''}" viewBox="0 0 150 140" aria-hidden="true"><ellipse cx="77" cy="123" rx="53" ry="7" fill="#342921" opacity=".09"/>${art}</svg>`;
 }
+
 function persist() {
   if (loaded.blocked) { warning = 'Saving paused to protect unreadable data. Export your backup before resetting browser storage.'; return; }
   try { storage.setItem(STORE_KEY, JSON.stringify(state)); warning = ''; }
   catch { warning = 'Could not save to this browser. Export a backup to keep your journal.'; }
+  queueCloudSync();
 }
+
 function tick() {
   if (!state.settings.sound) return;
   try {
@@ -304,20 +307,44 @@ function exportJournal() {
 }
 
 async function initAuth() {
-  try {
+   try {
     const res = await fetch('/.auth/me');
     const { clientPrincipal } = await res.json();
     renderAuthStatus(clientPrincipal);
-  } catch {
-    // Auth check failed silently — app still works fully offline/local.
-  }
+    if (!clientPrincipal) return;
+    authUser = clientPrincipal;
+    await syncOnSignIn();
+  } catch { /* App still works fully offline/local. */ }
 }
+
 function renderAuthStatus(user) {
   const el = $('#auth-status');
   if (!el) return;
   el.innerHTML = user
     ? `<span class="auth-user">${esc(user.userDetails)}</span><a class="text-button" href="/.auth/logout">Sign out</a>`
     : `<a class="text-button" href="/.auth/login/github">Sign in with GitHub</a>`;
+}
+
+async function syncOnSignIn() {
+  try {
+    const cloud = await fetchCloudState();
+    if (cloud) {
+      state.entries = cloud.entries; state.settings = cloud.settings;
+      persist(); render();
+      notify('Journal loaded from your account.');
+    } else {
+      await saveCloudState(state);
+      notify('Journal backed up to your account.');
+    }
+  } catch {
+    notify('Could not sync with your account. Your journal stays saved on this device.');
+  }
+}
+
+function queueCloudSync() {
+  if (!authUser) return;
+  clearTimeout(cloudSyncTimer);
+  cloudSyncTimer = setTimeout(() => { saveCloudState(state).catch(() => {}); }, 1500);
 }
 
 document.addEventListener('click', event => {

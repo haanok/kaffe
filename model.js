@@ -133,3 +133,19 @@ export function estimateHalfLife(answers = {}) {
   const value = Math.min(8, Math.max(3, Math.round(raw * 2) / 2));
   return { value, raw, factors, capped: raw > 8 ? 'high' : raw < 3 ? 'low' : null };
 }
+
+export async function fetchCloudState() {
+  const res = await fetch('/api/state', { credentials: 'include' });
+  if (res.status === 404) return null;
+  if (!res.ok) throw new Error('Could not load cloud journal');
+  return normalizeState(await res.json());
+}
+export async function saveCloudState(state) {
+  const res = await fetch('/api/state', {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(state),
+  });
+  if (!res.ok) throw new Error('Could not save to cloud');
+}
