@@ -74,12 +74,15 @@ try {
     await accessibility(page, `${engineName} history`);
     await page.screenshot({ path: `test-results/${engineName}-history.png`, fullPage: true });
     await route(page, 'sleep');
+    await page.getByRole('button', { name: 'Sleep settings' }).click();
     await page.locator('#bedtime').fill('22:30');
     await page.locator('#bedtime').dispatchEvent('change');
     await page.locator('#half-life').fill('6.5');
     await page.locator('#half-life').dispatchEvent('change');
     assert.equal((await journal(page)).settings.halfLife, 6.5);
     assert.equal((await journal(page)).settings.bedtime, '22:30');
+    await page.getByRole('button', { name: 'Close sleep settings' }).click();
+    assert.equal(await page.locator('.night-facts dd').nth(2).innerText(), '6.5 h');
     await noOverflow(page, `${engineName} sleep`);
     await accessibility(page, `${engineName} sleep`);
     await page.screenshot({ path: `test-results/${engineName}-sleep.png`, fullPage: true });
