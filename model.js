@@ -134,18 +134,66 @@ export function estimateHalfLife(answers = {}) {
   return { value, raw, factors, capped: raw > 8 ? 'high' : raw < 3 ? 'low' : null };
 }
 
-export async function fetchCloudState() {
-  const res = await fetch('/api/state', { credentials: 'include' });
-  if (res.status === 404) return null;
-  if (!res.ok) throw new Error('Could not load cloud journal');
-  return normalizeState(await res.json());
+// Cloud sync. SYNC_KEY remembers who this device last synced with, the
+// server version it saw, and which entry IDs both sides shared at that point.
+// That shared ID set is the base of a three-way merge, so an entry deleted on
+// one device is not resurrected by another device's copy.
+export const SYNC_KEY = 'kaffe-sync-v1';
+export function loadSyncMeta(storage) {
+  try {
+    const meta = JSON.parse(storage.getItem(SYNC_KEY) || 'null');
+    if (!meta || typeof meta.user !== 'string' || !Array.isArray(meta.base)) return null;
+    return { user: meta.user, name: typeof meta.name === 'string' ? meta.name : '', base: meta.base.filter(id => typeof id === 'string'), updatedAt: Number(meta.updatedAt) || 0, syncedAt: Number(meta.syncedAt) || 0, dirty: meta.dirty === true };
+  } catch { return null; }
 }
-export async function saveCloudState(state) {
-  const res = await fetch('/api/state', {
+export function mergeJournals(local, cloud, base = []) {
+  const known = new Set(base), localIds = new Set(local.entries.map(e => e.id)), cloudById = new Map(cloud.entries.map(e => [e.id, e]));
+  // Local edits win for entries on both sides; one-sided entries are kept only
+  // when they are new since the last sync, not when the other side deleted them.
+  const entries = [
+    ...local.entries.filter(e => cloudById.has(e.id) || !known.has(e.id)),
+    ...cloud.entries.filter(e => !localIds.has(e.id) && !known.has(e.id)),
+  ].sort((a, b) => a.time - b.time);
+  return normalizeState({ version: 2, entries, settings: local.settings });
+}
+// Decide what a sign-in does with the journal on this device:
+// - another account synced here last: its copy lives in that account, start from ours;
+// - nothing changed here since the last sync: take the account's journal;
+// - otherwise merge, so nothing logged on this device is lost.
+export function planSync({ local, cloud, meta, user }) {
+  if (meta && meta.user !== user) return { state: cloud || normalizeState({ version: 2, entries: [], settings: local.settings }), upload: !cloud };
+  if (!cloud) return { state: local, upload: true };
+  if (meta && !meta.dirty) return { state: cloud, upload: false };
+  const merged = mergeJournals(local, cloud, meta ? meta.base : []);
+  const cloudTimes = new Map(cloud.entries.map(e => [e.id, e.time]));
+  const same = merged.entries.length === cloud.entries.length && merged.entries.every(e => cloudTimes.get(e.id) === e.time) && JSON.stringify(merged.settings) === JSON.stringify(cloud.settings);
+  return { state: same && meta ? cloud : merged, upload: !same || !meta };
+}
+export class CloudError extends Error {
+  constructor(status, message) { super(message); this.status = status; }
+}
+async function cloudRequest(options) {
+  let res;
+  try { res = await fetch('/api/state', { credentials: 'same-origin', redirect: 'manual', ...options }); }
+  catch { throw new CloudError(0, 'Offline'); }
+  // An opaque redirect means the session ended and the platform wants a login.
+  if (res.type === 'opaqueredirect' || res.status === 401 || res.status === 403) throw new CloudError(401, 'Signed out');
+  return res;
+}
+export async function fetchCloudState() {
+  const res = await cloudRequest({ headers: { Accept: 'application/json' } });
+  if (res.status === 404) return null;
+  if (!res.ok) throw new CloudError(res.status, 'Could not load cloud journal');
+  const raw = await res.json();
+  return { state: normalizeState(raw), updatedAt: Number(raw.updatedAt) || 0 };
+}
+export async function saveCloudState(state, baseUpdatedAt, keepalive = false) {
+  const res = await cloudRequest({
     method: 'POST',
-    credentials: 'include',
+    keepalive,
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(state),
+    body: JSON.stringify({ version: 2, entries: state.entries, settings: state.settings, baseUpdatedAt }),
   });
-  if (!res.ok) throw new Error('Could not save to cloud');
+  if (!res.ok) throw new CloudError(res.status, 'Could not save to cloud');
+  return Number((await res.json()).updatedAt) || 0;
 }

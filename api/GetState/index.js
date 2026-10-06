@@ -1,22 +1,15 @@
-const { CosmosClient } = require("@azure/cosmos");
-let client;
-function getContainer() {
-  client ||= new CosmosClient(process.env.COSMOS_CONNECTION_STRING);
-  return client.database("caffeinetracker").container("userstate");
-}
+const { getContainer, getUserId, json, publicState } = require("../shared/journal");
 
 module.exports = async function (context, req) {
-  const principalHeader = req.headers["x-ms-client-principal"];
-  if (!principalHeader) { context.res = { status: 401, body: "Not authenticated" }; return; }
-  const userId = JSON.parse(Buffer.from(principalHeader, "base64").toString("utf8")).userId;
+  const userId = getUserId(req);
+  if (!userId) { context.res = json(401, { error: "Not signed in" }); return; }
 
   try {
     const { resource } = await getContainer().item(userId, userId).read();
-    if (!resource) { context.res = { status: 404 }; return; }
-    context.res = { status: 200, headers: { "Content-Type": "application/json" }, body: resource };
+    context.res = resource ? json(200, publicState(resource)) : json(404, { error: "No journal yet" });
   } catch (err) {
-    if (err.code === 404) { context.res = { status: 404 }; return; }
-    context.log.error(err);
-    context.res = { status: 500, body: "Could not load journal" };
+    if (err.code === 404) { context.res = json(404, { error: "No journal yet" }); return; }
+    context.log.error("Cosmos read error:", err);
+    context.res = json(500, { error: "Could not load journal" });
   }
 };

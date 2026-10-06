@@ -1,6 +1,6 @@
 import { CATEGORIES, DRINKS, DRINK_BY_ID, QUICK, INGREDIENTS, ING_BY_ID, RECIPES, MAX_LAYERS, blendKey, matchRecipe, blendTotals } from './data.js';
 import { pourDrink, pourWater, isPouring, rollTo } from './pour.js';
-import { STORE_KEY, HOUR, uid, dayKey, timeValue, validTime, fmtTime, nextBedtime, activeAt, timeBelow, onDay, sumMg, sumKcal, historyDays, waterBonuses, loadState, makeDrink, estimateHalfLife, HALF_LIFE_BASE, fetchCloudState, saveCloudState } from './model.js';
+import { STORE_KEY, HOUR, uid, dayKey, timeValue, validTime, fmtTime, nextBedtime, activeAt, timeBelow, onDay, sumMg, sumKcal, historyDays, waterBonuses, loadState, makeDrink, estimateHalfLife, HALF_LIFE_BASE, SYNC_KEY, loadSyncMeta, mergeJournals, planSync, fetchCloudState, saveCloudState } from './model.js';
 
 const $ = selector => document.querySelector(selector);
 const esc = value => String(value).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -8,8 +8,10 @@ let storage;
 try { storage = window.localStorage; } catch { storage = { getItem() { throw new Error('Storage unavailable'); } }; }
 const loaded = loadState(storage);
 const state = loaded.state;
-let authUser = null;
-let cloudSyncTimer = null;
+// Account sync: authUser is the signed-in GitHub principal (or null), and
+// syncMeta is this device's record of its last sync (see SYNC_KEY in model.js).
+let authUser = null, syncMeta = loadSyncMeta(storage), revision = 0;
+let syncStatus = syncMeta ? 'checking' : 'local', syncTimer = null, syncRun = null, syncAgain = false, signOutError = false;
 let warning = loaded.warning;
 let view = 'today', historyRange = 7, selectedDay = dayKey(), layers = [], ingredientCategory = 'All';
 let sleepEntrance = false, historyMotion = '', historyFigures = null, undo = null, toastTimer, modalDrink = null, modalAmount = 1, modalCategory = 'all', modalQuery = '', audio;
@@ -31,6 +33,10 @@ const icons = {
   shuffle: '<path d="m3 5 4 0 10 14h4m-4-4 4 4-4 4M3 19h4L17 5h4m-4-4 4 4-4 4"/>',
   settings: '<path d="M4 7h9m4 0h3M4 17h3m4 0h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/>',
   download: '<path d="M12 3v12m-5-5 5 5 5-5M4 16v5h16v-5"/>',
+  cloud: '<path d="M7 19h10.5a4.5 4.5 0 0 0 .4-9A6.5 6.5 0 0 0 5.5 9.6 4.7 4.7 0 0 0 7 19Z"/>',
+  devices: '<rect x="2" y="4" width="14" height="10" rx="2"/><path d="M5 18h8"/><rect x="17" y="8" width="5" height="12" rx="1.5"/>',
+  sync: '<path d="M20 11a8 8 0 0 0-14.5-4.5L4 8m0-5v5h5M4 13a8 8 0 0 0 14.5 4.5L20 16m0 5v-5h-5"/>',
+  signout: '<path d="M14 4h4a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-4M10 16l-4-4 4-4M6 12h10"/>',
 };
 const icon = name => `<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${icons[name] || icons.cup}</svg>`;
 function cup(cat = 'coffee', large = false) {
@@ -42,10 +48,16 @@ function cup(cat = 'coffee', large = false) {
   return `<svg class="cup-art ${large ? 'large' : ''}" viewBox="0 0 150 140" aria-hidden="true"><ellipse cx="77" cy="123" rx="53" ry="7" fill="#342921" opacity=".09"/>${art}</svg>`;
 }
 
+function saveLocal() {
+  if (loaded.blocked) { warning = 'Saving paused to protect unreadable data. Export your backup before resetting browser storage.'; return false; }
+  try { storage.setItem(STORE_KEY, JSON.stringify(state)); warning = ''; return true; }
+  catch { warning = 'Could not save to this browser. Export a backup to keep your journal.'; return false; }
+}
+// Every user change goes through here: save locally, then mark it for the account.
 function persist() {
-  if (loaded.blocked) { warning = 'Saving paused to protect unreadable data. Export your backup before resetting browser storage.'; return; }
-  try { storage.setItem(STORE_KEY, JSON.stringify(state)); warning = ''; }
-  catch { warning = 'Could not save to this browser. Export a backup to keep your journal.'; }
+  if (!saveLocal()) return;
+  revision++;
+  if (syncMeta && !syncMeta.dirty) writeSyncMeta({ ...syncMeta, dirty: true });
   queueCloudSync();
 }
 
@@ -112,7 +124,7 @@ function render() {
   if (!isPouring()) heartbeat(sumMg(onDay(state.entries)));
   $('meta[name="theme-color"]').content = state.settings.theme === 'dark' ? '#242321' : '#f7f4ec';
   const titles = { today: ['A little ritual. A little balance.', 'Your daily brew.'], history: ['Every sip tells a story.', 'The pages so far.'], sleep: ['Make room for a softer evening.', 'Your wind-down.'], lab: ['A dash of this. A splash of that.', 'The Blend Lab.'] };
-  app.innerHTML = `<div class="app-shell"><aside class="sidebar"><a href="#today" class="brand" aria-label="Kaffe home">${icon('cup')}<span>kaffe<span class="brand-dot">.</span></span></a><p class="brand-note">a little coffee journal</p><nav aria-label="Main navigation">${[['today', 'Today'], ['history', 'History'], ['sleep', 'Sleep'], ['lab', 'Blend Lab']].map(([id, title]) => `<a class="nav-link ${view === id ? 'selected' : ''}" href="#${id}" aria-label="${title}" ${view === id ? 'aria-current="page"' : ''}>${icon(id)}<span>${title}</span>${view === id ? '<span class="nav-dot"></span>' : ''}</a>`).join('')}</nav><div class="sidebar-bottom"><div class="sidebar-doodle">${cup('tea')}<p>Good days are made<br>one small sip at a time.</p></div><div class="utility"><button class="icon-button" data-action="theme" data-focus="theme" aria-label="Switch to ${state.settings.theme === 'light' ? 'dark' : 'light'} theme" title="Change theme">${icon(state.settings.theme === 'light' ? 'sleep' : 'sun')}</button><button class="icon-button" data-action="sound" data-focus="sound" aria-label="${state.settings.sound ? 'Disable' : 'Enable'} sounds" aria-pressed="${state.settings.sound}" title="Toggle sounds">${icon(state.settings.sound ? 'sound' : 'mute')}</button><button class="icon-button" data-action="settings" title="Settings" aria-label="Settings">${icon('settings')}</button><button class="icon-button" data-action="export" title="Export journal" aria-label="Export journal backup">${icon('download')}</button></div><p class="local-note">Just yours. Saved on this device.</p></div></aside><main id="main" tabindex="-1"><header class="page-header"><div><p class="eyebrow">${titles[view][0]}</p><h1>${titles[view][1]}</h1></div></header>${warning ? `<div class="warning" role="alert">${esc(warning)} <button class="text-button" data-action="export">Export backup</button></div>` : ''}${view === 'today' ? todayView() : view === 'history' ? historyView() : view === 'sleep' ? sleepView() : labView()}<footer class="page-footer"><span>Made for mindful sipping, not perfect numbers.</span><span>Caffeine values are estimates. ${state.settings.halfLife}h half-life model.</span></footer></main></div>`;
+  app.innerHTML = `<div class="app-shell"><aside class="sidebar"><a href="#today" class="brand" aria-label="Kaffe home">${icon('cup')}<span>kaffe<span class="brand-dot">.</span></span></a><p class="brand-note">a little coffee journal</p><nav aria-label="Main navigation">${[['today', 'Today'], ['history', 'History'], ['sleep', 'Sleep'], ['lab', 'Blend Lab']].map(([id, title]) => `<a class="nav-link ${view === id ? 'selected' : ''}" href="#${id}" aria-label="${title}" ${view === id ? 'aria-current="page"' : ''}>${icon(id)}<span>${title}</span>${view === id ? '<span class="nav-dot"></span>' : ''}</a>`).join('')}</nav><div class="sidebar-bottom"><div class="sidebar-doodle">${cup('tea')}<p>Good days are made<br>one small sip at a time.</p></div><div class="utility"><button class="icon-button" data-action="theme" data-focus="theme" aria-label="Switch to ${state.settings.theme === 'light' ? 'dark' : 'light'} theme" title="Change theme">${icon(state.settings.theme === 'light' ? 'sleep' : 'sun')}</button><button class="icon-button" data-action="sound" data-focus="sound" aria-label="${state.settings.sound ? 'Disable' : 'Enable'} sounds" aria-pressed="${state.settings.sound}" title="Toggle sounds">${icon(state.settings.sound ? 'sound' : 'mute')}</button><button class="icon-button" data-action="settings" title="Settings" aria-label="Settings">${icon('settings')}</button><button class="icon-button" data-action="export" title="Export journal" aria-label="Export journal backup">${icon('download')}</button></div>${accountChip()}</div></aside><main id="main" tabindex="-1"><header class="page-header"><div><p class="eyebrow">${titles[view][0]}</p><h1>${titles[view][1]}</h1></div></header>${warning ? `<div class="warning" role="alert">${esc(warning)} <button class="text-button" data-action="export">Export backup</button></div>` : ''}${view === 'today' ? todayView() : view === 'history' ? historyView() : view === 'sleep' ? sleepView() : labView()}<footer class="page-footer"><span>Made for mindful sipping, not perfect numbers.</span><span>Caffeine values are estimates. ${state.settings.halfLife}h half-life model.</span></footer></main></div>`;
   if (focusKey) document.querySelector(`[data-focus="${CSS.escape(focusKey)}"]`)?.focus({ preventScroll: true });
   watchBlendDock();
 }
@@ -308,45 +320,160 @@ function exportJournal() {
   notify('Journal backup downloaded.');
 }
 
-async function initAuth() {
-   try {
-    const res = await fetch('/.auth/me');
-    const { clientPrincipal } = await res.json();
-    renderAuthStatus(clientPrincipal);
-    if (!clientPrincipal) return;
-    authUser = clientPrincipal;
-    await syncOnSignIn();
-  } catch { /* App still works fully offline/local. */ }
+function writeSyncMeta(meta) {
+  syncMeta = meta;
+  try { meta ? storage.setItem(SYNC_KEY, JSON.stringify(meta)) : storage.removeItem(SYNC_KEY); } catch { /* Sync still works for this session. */ }
 }
-
-function renderAuthStatus(user) {
-  const el = $('#auth-status');
-  if (!el) return;
-  el.innerHTML = user
-    ? `<span class="auth-user">${esc(user.userDetails)}</span><a class="text-button" href="/.auth/logout">Sign out</a>`
-    : `<a class="text-button" href="/.auth/login/github">Sign in with GitHub</a>`;
+const loginUrl = () => `/.auth/login/github?post_login_redirect_uri=${encodeURIComponent(location.pathname + location.hash)}`;
+const accountName = () => authUser?.userDetails || syncMeta?.name || '';
+function avatar(size = 'small') {
+  const name = accountName();
+  // userDetails is the GitHub login, which GitHub serves an avatar for.
+  return `<span class="avatar ${size}" data-initial="${esc((name[0] || '?').toUpperCase())}" aria-hidden="true">${name && navigator.onLine ? `<img src="https://github.com/${encodeURIComponent(name)}.png?size=96" alt="" loading="lazy" referrerpolicy="no-referrer">` : ''}</span>`;
 }
+function syncedAgo() {
+  const at = syncMeta?.syncedAt || Date.now(), minutes = Math.round((Date.now() - at) / 60000);
+  return minutes < 1 ? 'just now' : minutes < 60 ? `${minutes} min ago` : new Date(at).toLocaleString([], { weekday: 'short', hour: 'numeric', minute: '2-digit' });
+}
+function syncText() {
+  if (syncStatus === 'synced') return `Synced ${syncedAgo()}`;
+  return ({
+    local: 'Saved on this device',
+    checking: 'Connecting…',
+    syncing: 'Syncing…',
+    offline: 'Offline · will sync later',
+    expired: 'Session ended · sign in again',
+    error: 'Couldn’t sync right now',
+  })[syncStatus];
+}
+function accountChipInner() {
+  const signedOut = syncStatus === 'local';
+  return `${signedOut ? `<span class="avatar small cloud">${icon('cloud')}</span>` : avatar()}<span class="account-text"><strong>${signedOut ? 'Sync your journal' : esc(accountName())}</strong><span class="sync-line"><i class="sync-dot"></i>${esc(signedOut ? 'Sign in to back it up' : syncText())}</span></span>`;
+}
+function accountLabel() { return syncStatus === 'local' ? 'Sign in to sync your journal' : `Account ${accountName()}: ${syncText()}`; }
+function accountChip() {
+  return `<button class="account-chip" id="account-chip" data-action="account" data-status="${syncStatus}" aria-label="${esc(accountLabel())}" title="${esc(accountLabel())}">${accountChipInner()}</button>`;
+}
+function updateAccountUI() {
+  const chip = $('#account-chip');
+  if (chip) { chip.innerHTML = accountChipInner(); chip.dataset.status = syncStatus; chip.setAttribute('aria-label', accountLabel()); chip.title = accountLabel(); }
+  const line = $('#account-sync');
+  if (line) { line.dataset.status = syncStatus; line.querySelector('span').textContent = syncText(); }
+  if (picker.open && picker.dataset.view === 'account' && (!!authUser) !== (picker.dataset.signedIn === 'true')) openAccount();
+}
+function setSyncStatus(status) { syncStatus = status; updateAccountUI(); }
 
-async function syncOnSignIn() {
-  try {
-    const cloud = await fetchCloudState();
-    if (cloud) {
-      state.entries = cloud.entries; state.settings = cloud.settings;
-      persist(); render();
-      notify('Journal loaded from your account.');
-    } else {
-      await saveCloudState(state);
-      notify('Journal backed up to your account.');
-    }
-  } catch {
-    notify('Could not sync with your account. Your journal stays saved on this device.');
+function openAccount() {
+  picker.dataset.view = 'account';
+  picker.dataset.signedIn = !!authUser;
+  const close = `<button class="icon-button" data-action="close" aria-label="Close account">${icon('close')}</button>`;
+  if (authUser) {
+    const count = state.entries.length;
+    picker.innerHTML = `<div class="dialog-heading"><div><p class="eyebrow">YOUR ACCOUNT</p><h2 id="picker-title">Your journal, everywhere.</h2></div>${close}</div><div class="account-card">${avatar('large')}<div><strong>${esc(accountName())}</strong><span>Signed in with GitHub</span></div></div><div class="account-sync" id="account-sync" data-status="${syncStatus}" role="status"><i class="sync-dot"></i><span>${esc(syncText())}</span><button class="text-button" data-action="sync-now">${icon('sync')}Sync now</button></div><p class="account-count">${count} ${count === 1 ? 'entry' : 'entries'} in your journal, on this device and in your account.</p>${signOutError ? `<div class="warning" role="alert">Your latest changes couldn’t be backed up, so they’re still only on this device. <button class="text-button" data-action="sign-out" data-force="true">Sign out anyway</button></div>` : ''}<button class="button subtle full-width" data-action="sign-out">${icon('signout')}Sign out</button><p class="small-note">Signing out clears the journal from this device. It stays safe in your account for next time.</p>`;
+  } else {
+    const expired = syncStatus === 'expired', count = state.entries.length;
+    const perks = [['cloud', 'Backed up as you go', 'Each sip is saved to your account a moment after you log it.'], ['devices', 'On your phone and laptop', 'Sign in anywhere and pick up where you left off.'], ['cup', 'Still works offline', 'Log without a connection. It catches up when you’re back.']];
+    picker.innerHTML = `<div class="dialog-heading"><div><p class="eyebrow">${expired ? 'WELCOME BACK' : 'YOUR JOURNAL, EVERYWHERE'}</p><h2 id="picker-title">${expired ? 'Sign in to keep syncing.' : 'Keep every sip safe.'}</h2></div>${close}</div><div class="account-hero" aria-hidden="true">${cup('coffee')}<span class="hero-cloud">${icon('cloud')}</span>${cup('tea')}</div>${expired ? `<p class="account-lead">Your session ended. Anything you log now stays on this device and syncs as soon as you’re signed in again.</p>` : `<ul class="account-perks">${perks.map(([name, title, text]) => `<li><span class="perk-icon">${icon(name)}</span><div><strong>${title}</strong><span>${text}</span></div></li>`).join('')}</ul>`}${!expired && count ? `<p class="account-merge">${icon('plus')}<span>The ${count} ${count === 1 ? 'entry' : 'entries'} on this device will be added to your account.</span></p>` : ''}<a class="button github-button full-width" href="${esc(loginUrl())}"><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg>${expired ? 'Sign in again with GitHub' : 'Continue with GitHub'}</a><p class="small-note">Your journal is stored under your GitHub account ID, and Kaffe shows your username. Nothing is posted to GitHub. ${expired ? '' : 'Rather not? Everything keeps working on this device.'}</p>`;
   }
+  showDialog();
+}
+picker.addEventListener('close', () => { delete picker.dataset.view; signOutError = false; });
+// A missing avatar falls back to the initial behind it.
+document.addEventListener('error', event => { if (event.target.matches?.('.avatar img')) event.target.remove(); }, true);
+
+async function initAuth() {
+  let principal;
+  try {
+    const res = await fetch('/.auth/me', { cache: 'no-store', credentials: 'same-origin' });
+    if (!res.ok) throw new Error('Auth unavailable');
+    principal = (await res.json()).clientPrincipal;
+  } catch {
+    // Offline, or no auth endpoint (local development). The journal works as before.
+    setSyncStatus(syncMeta ? 'offline' : 'local'); return;
+  }
+  if (!principal || principal.identityProvider !== 'github') {
+    authUser = null; setSyncStatus(syncMeta ? 'expired' : 'local'); return;
+  }
+  authUser = principal;
+  const firstLink = syncMeta?.user !== principal.userId;
+  await syncNow(true);
+  if (firstLink && syncStatus === 'synced') notify(`Signed in as ${principal.userDetails}. Your journal is backed up.`);
 }
 
 function queueCloudSync() {
   if (!authUser) return;
-  clearTimeout(cloudSyncTimer);
-  cloudSyncTimer = setTimeout(() => { saveCloudState(state).catch(() => {}); }, 1500);
+  clearTimeout(syncTimer);
+  syncTimer = setTimeout(() => syncNow(), 1500);
+}
+// Runs one sync at a time; calls made meanwhile join the running one and
+// trigger one more round. "full" fetches the account's copy and merges it;
+// otherwise this device's changes are pushed on top of the version it last saw.
+function syncNow(full = false) {
+  clearTimeout(syncTimer);
+  if (syncRun) { syncAgain = true; return syncRun; }
+  syncRun = (async () => {
+    let round = full;
+    do { syncAgain = false; await syncRound(round); round = false; } while (syncAgain && authUser);
+  })().finally(() => { syncRun = null; });
+  return syncRun;
+}
+async function syncRound(full) {
+  if (!authUser) return;
+  const user = authUser.userId, name = authUser.userDetails;
+  setSyncStatus('syncing');
+  try {
+    for (let attempt = 0; ; attempt++) {
+      let cloud = null, base;
+      const fetchFirst = full || syncMeta?.user !== user;
+      if (fetchFirst) { cloud = await fetchCloudState(); base = cloud?.updatedAt; }
+      else base = syncMeta.updatedAt;
+      // From here to the save request nothing awaits, so this is the exact snapshot sent.
+      const startRevision = revision, startIds = state.entries.map(e => e.id);
+      const plan = fetchFirst ? planSync({ local: state, cloud: cloud?.state, meta: syncMeta, user }) : { state, upload: true };
+      const sentIds = plan.state.entries.map(e => e.id);
+      let updatedAt = base || 0;
+      if (plan.upload) {
+        try { updatedAt = await saveCloudState(plan.state, base); }
+        catch (err) { if (err.status === 409 && attempt < 2) { full = true; continue; } throw err; }
+      }
+      if (authUser?.userId !== user) return;
+      // Keep anything logged or deleted while the request was in flight.
+      const changedMeanwhile = revision !== startRevision;
+      const next = changedMeanwhile ? mergeJournals(state, plan.state, startIds) : plan.state;
+      if (next !== state) { state.entries = next.entries; state.settings = next.settings; undo = null; saveLocal(); render(); }
+      writeSyncMeta({ user, name, base: sentIds, updatedAt, syncedAt: Date.now(), dirty: changedMeanwhile });
+      if (changedMeanwhile) syncAgain = true;
+      setSyncStatus('synced');
+      return;
+    }
+  } catch (err) {
+    if (err.status === 401) { authUser = null; setSyncStatus('expired'); }
+    else setSyncStatus(err.status === 0 ? 'offline' : 'error');
+  }
+}
+// Last chance to save a change made just before the tab closes.
+function flushOnHide() {
+  if (!authUser || !syncMeta?.dirty || syncMeta.user !== authUser.userId || syncRun) return;
+  saveCloudState(state, syncMeta.updatedAt, true).then(updatedAt => writeSyncMeta({ ...syncMeta, base: state.entries.map(e => e.id), updatedAt, syncedAt: Date.now(), dirty: false })).catch(() => {});
+}
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'hidden') flushOnHide();
+  // Coming back to the tab: pick up what other devices logged meanwhile.
+  else if (authUser && Date.now() - (syncMeta?.syncedAt || 0) > 60000) syncNow(true);
+});
+window.addEventListener('online', () => { if (authUser) syncNow(true); else if (syncMeta) initAuth(); });
+
+async function signOut(force) {
+  if (!force && syncMeta?.dirty && authUser) {
+    await syncNow();
+    if (syncMeta?.dirty) { signOutError = true; openAccount(); return; }
+  }
+  if (!force) {
+    // The account has everything, so this device keeps nothing behind.
+    try { storage.removeItem(STORE_KEY); } catch {}
+    writeSyncMeta(null);
+  }
+  location.href = '/.auth/logout?post_logout_redirect_uri=%2F';
 }
 
 document.addEventListener('click', event => {
@@ -358,6 +485,9 @@ document.addEventListener('click', event => {
     case 'sound': state.settings.sound = !state.settings.sound; commit(); notify(`Sounds ${state.settings.sound ? 'on' : 'off'}.`); break;
     case 'export': exportJournal(); break;
     case 'settings': openSettings(); break;
+    case 'account': openAccount(); break;
+    case 'sync-now': syncNow(true); break;
+    case 'sign-out': signOut(d.force === 'true'); break;
     case 'apply-half-life': {
       state.settings.halfLife = +d.value; commit(`Half-life set to ${d.value} h.`);
       $('#half-life').value = d.value; $('#half-life-value').textContent = `${d.value} h`; updateEstimate(); break;
@@ -457,6 +587,7 @@ function route(focus = false) {
 window.addEventListener('hashchange', () => route(true));
 // Keep multiple open tabs in sync without clobbering a newer journal.
 window.addEventListener('storage', event => {
+  if (event.key === SYNC_KEY) { syncMeta = loadSyncMeta(storage); if (!syncMeta && authUser) { authUser = null; syncStatus = 'local'; } updateAccountUI(); }
   if (event.key === STORE_KEY) {
     const fresh = loadState(storage);
     if (!fresh.warning) { state.entries = fresh.state.entries; state.settings = fresh.state.settings; loaded.blocked = false; warning = ''; undo = null; render(); notify('Journal updated from another tab.'); }
@@ -475,7 +606,7 @@ setInterval(() => {
 }, 60000);
 window.addEventListener('pageshow', () => { if (!picker.open) render(); });
 route();
-if (!warning) persist();
+if (!warning) saveLocal();
 initAuth();
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('./sw.js').catch(() => notify('Offline setup unavailable. The journal still works online.'));
