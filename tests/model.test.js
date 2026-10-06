@@ -81,3 +81,24 @@ test('unreadable v2 is protected and unavailable storage does not crash', () => 
   assert.equal(corrupt.blocked, true); assert.ok(corrupt.warning);
   assert.ok(loadState({ getItem() { throw new Error('denied'); } }).warning);
 });
+test('PDF report is a well-formed document covering every period and entry', async () => {
+  const { buildReport, reportData, WIDTHS, encode } = await import('../report.js');
+  assert.equal(WIDTHS.regular.length, 95); assert.equal(WIDTHS.bold.length, 95);
+  assert.deepEqual(encode('æøå – ’ ★'), [230, 248, 229, 32, 150, 32, 146, 32, 63]);
+  const entries = [coffee(500, at - 40 * 24 * HOUR, 'old'), coffee(100, at - 2 * 24 * HOUR, 'week'), coffee(150, at - HOUR, 'today'), water(at, 'water')];
+  const data = reportData(entries, at, 5);
+  assert.deepEqual([data.periods.today.total, data.periods.week.total, data.periods.month.total, data.periods.all.total], [150, 250, 250, 750]);
+  assert.equal(data.periods.all.count, 41); assert.equal(data.periods.all.over, 1); assert.equal(data.periods.today.water, 1);
+  assert.equal(data.pages.length, 3); assert.equal(data.pages[0].key, dayKey(at));
+  const many = Array.from({ length: 400 }, (_, i) => coffee(50, at - i * 6 * HOUR, `c${i}`));
+  for (const pdf of [buildReport({ entries, settings: { halfLife: 5 } }, at), buildReport({ entries: [], settings: {} }, at), buildReport({ entries: many, settings: { halfLife: 5, bedtime: '22:00' } }, at)]) {
+    const text = Buffer.from(pdf).toString('latin1');
+    assert.ok(text.startsWith('%PDF-1.4') && text.endsWith('%%EOF\n'));
+    const xref = +text.match(/startxref\n(\d+)/)[1];
+    assert.ok(text.startsWith('xref', xref));
+    const offsets = [...text.slice(xref).matchAll(/^(\d{10}) 00000 n $/gm)].map(m => +m[1]);
+    offsets.forEach((offset, i) => assert.ok(text.startsWith(`${i + 1} 0 obj`, offset), `object ${i + 1} offset`));
+    for (const m of text.matchAll(/<< \/Length (\d+) >>\nstream\n/g)) assert.ok(text.startsWith('\nendstream', m.index + m[0].length + +m[1]));
+    assert.ok(+text.match(/\/Type \/Pages .*\/Count (\d+)/)[1] >= 2);
+  }
+});

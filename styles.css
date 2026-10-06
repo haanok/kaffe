@@ -93,3 +93,5 @@ dialog{background:var(--paper);color:var(--ink);border:1px solid var(--line);bor
 .night-facts .night-note{grid-column:1/-1;max-width:none;font-size:12px}
 .settings-row{align-items:flex-start}
 }
+.export-options{display:grid;gap:12px}.export-option{display:flex;align-items:center;gap:16px;width:100%;text-align:left;padding:18px;border-radius:17px;background:var(--soft);border:1px solid transparent;transition:border-color .15s,transform .15s}.export-option:hover{border-color:var(--accent);transform:translateY(-1px)}.export-option.peach{background:var(--peach)}.export-option.sage{background:var(--sage)}.export-option>.icon{width:26px;height:26px;color:var(--accent)}.export-option strong{display:block;font-size:15px}.export-option small{display:block;margin-top:3px;color:var(--muted);font-size:12px;line-height:1.45}.export-file{display:flex;flex-direction:column;gap:8px;margin-top:20px;padding-top:18px;border-top:1px solid var(--line);font-size:12px;color:var(--muted)}.export-file input{width:100%;font-size:12px}.export-file+.form-error:empty{display:none}
+@media(prefers-reduced-motion:reduce){.export-option{transition:none}.export-option:hover{transform:none}}
