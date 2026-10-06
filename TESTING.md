@@ -22,7 +22,7 @@ npm start
 
 Open http://127.0.0.1:4173. Screenshots are in ignored `test-results/`.
 
-`npm run package:site` creates `dist/` with only ten allowlisted public files. It copies assets, without compiling or bundling. Never deploy the repository root: local configuration and tooling do not belong on the web.
+`npm run package:site` creates `dist/` with only eleven allowlisted public files. It copies assets, without compiling or bundling. Never deploy the repository root: local configuration and tooling do not belong on the web.
 
 ## Publish an isolated Azure preview (not production)
 
@@ -53,6 +53,7 @@ The workflow retains site and screenshot artifacts for seven days. Existing GitH
 - [ ] Make and log a Latte in Blend Lab; try recipes and the six-layer limit.
 - [ ] Switch light/dark themes; check readability, keyboard navigation and dialogs.
 - [ ] Export a journal backup and check that its JSON contains the expected entries.
+- [ ] Export the PDF caffeine report; check today, week, month and all-time figures and the daily pages. Turn the exported JSON back into a PDF from the export dialog.
 - [ ] On iPhone, add to Home Screen and inspect icon/standalone layout. The current SVG-only icon may need a PNG fallback for some devices.
 - [ ] Open the preview online first, allow offline setup, then enable airplane mode and reload/reopen. Log water offline, return online and verify it persists. Safari offline is a required manual check.
 - [ ] After a preview update, close/reopen or reload again and confirm the new UI appears without losing journal entries.
@@ -63,4 +64,4 @@ Data is stored only in that browser on that exact origin. Preview, production, l
 
 The ignored `.continue/agents/new-config.yaml` now references `${{ secrets.OPENROUTER_API_KEY }}` instead of embedding a key. Revoke the previously exposed key in OpenRouter and configure a replacement through Continue's secret mechanism before starting a new session. Do not paste the replacement into chat or commit it. This credential is for the development assistant, not the Kaffe app; rotation has not been performed automatically.
 
-The service-worker cache is `kaffe-journal-v20`. Increment it in `sw.js` whenever public app files change, then rerun tests and packaging. Azure headers request HTTP revalidation; service-worker caching still provides offline use.
+The service-worker cache is `kaffe-journal-v16`. Increment it in `sw.js` whenever public app files change, then rerun tests and packaging. Azure headers request HTTP revalidation; service-worker caching still provides offline use.

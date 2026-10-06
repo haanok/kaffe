@@ -1,6 +1,7 @@
 import { CATEGORIES, DRINKS, DRINK_BY_ID, QUICK, INGREDIENTS, ING_BY_ID, RECIPES, MAX_LAYERS, blendKey, matchRecipe, blendTotals } from './data.js';
 import { pourDrink, pourWater, isPouring, rollTo } from './pour.js';
-import { STORE_KEY, HOUR, uid, dayKey, timeValue, validTime, fmtTime, nextBedtime, activeAt, timeBelow, onDay, sumMg, sumKcal, historyDays, waterBonuses, loadState, makeDrink, estimateHalfLife, HALF_LIFE_BASE, SYNC_KEY, loadSyncMeta, mergeJournals, planSync, fetchCloudState, saveCloudState } from './model.js';
+import { STORE_KEY, HOUR, uid, dayKey, timeValue, validTime, fmtTime, nextBedtime, activeAt, timeBelow, onDay, sumMg, sumKcal, historyDays, waterBonuses, loadState, normalizeState, makeDrink, estimateHalfLife, HALF_LIFE_BASE, SYNC_KEY, loadSyncMeta, mergeJournals, planSync, fetchCloudState, saveCloudState } from './model.js';
+import { buildReport } from './report.js';
 
 const $ = selector => document.querySelector(selector);
 const esc = value => String(value).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -124,7 +125,7 @@ function render() {
   if (!isPouring()) heartbeat(sumMg(onDay(state.entries)));
   $('meta[name="theme-color"]').content = state.settings.theme === 'dark' ? '#242321' : '#f7f4ec';
   const titles = { today: ['A little ritual. A little balance.', 'Your daily brew.'], history: ['Every sip tells a story.', 'The pages so far.'], sleep: ['Make room for a softer evening.', 'Your wind-down.'], lab: ['A dash of this. A splash of that.', 'The Blend Lab.'] };
-  app.innerHTML = `<div class="app-shell"><aside class="sidebar"><a href="#today" class="brand" aria-label="Kaffe home">${icon('cup')}<span>kaffe<span class="brand-dot">.</span></span></a><p class="brand-note">a little coffee journal</p><nav aria-label="Main navigation">${[['today', 'Today'], ['history', 'History'], ['sleep', 'Sleep'], ['lab', 'Blend Lab']].map(([id, title]) => `<a class="nav-link ${view === id ? 'selected' : ''}" href="#${id}" aria-label="${title}" ${view === id ? 'aria-current="page"' : ''}>${icon(id)}<span>${title}</span>${view === id ? '<span class="nav-dot"></span>' : ''}</a>`).join('')}</nav><div class="sidebar-bottom"><div class="sidebar-doodle">${cup('tea')}<p>Good days are made<br>one small sip at a time.</p></div><div class="utility"><button class="icon-button" data-action="theme" data-focus="theme" aria-label="Switch to ${state.settings.theme === 'light' ? 'dark' : 'light'} theme" title="Change theme">${icon(state.settings.theme === 'light' ? 'sleep' : 'sun')}</button><button class="icon-button" data-action="sound" data-focus="sound" aria-label="${state.settings.sound ? 'Disable' : 'Enable'} sounds" aria-pressed="${state.settings.sound}" title="Toggle sounds">${icon(state.settings.sound ? 'sound' : 'mute')}</button><button class="icon-button" data-action="settings" title="Settings" aria-label="Settings">${icon('settings')}</button><button class="icon-button" data-action="export" title="Export journal" aria-label="Export journal backup">${icon('download')}</button></div>${accountChip()}</div></aside><main id="main" tabindex="-1"><header class="page-header"><div><p class="eyebrow">${titles[view][0]}</p><h1>${titles[view][1]}</h1></div></header>${warning ? `<div class="warning" role="alert">${esc(warning)} <button class="text-button" data-action="export">Export backup</button></div>` : ''}${view === 'today' ? todayView() : view === 'history' ? historyView() : view === 'sleep' ? sleepView() : labView()}<footer class="page-footer"><span>Made for mindful sipping, not perfect numbers.</span><span>Caffeine values are estimates. ${state.settings.halfLife}h half-life model.</span></footer></main></div>`;
+  app.innerHTML = `<div class="app-shell"><aside class="sidebar"><a href="#today" class="brand" aria-label="Kaffe home">${icon('cup')}<span>kaffe<span class="brand-dot">.</span></span></a><p class="brand-note">a little coffee journal</p><nav aria-label="Main navigation">${[['today', 'Today'], ['history', 'History'], ['sleep', 'Sleep'], ['lab', 'Blend Lab']].map(([id, title]) => `<a class="nav-link ${view === id ? 'selected' : ''}" href="#${id}" aria-label="${title}" ${view === id ? 'aria-current="page"' : ''}>${icon(id)}<span>${title}</span>${view === id ? '<span class="nav-dot"></span>' : ''}</a>`).join('')}</nav><div class="sidebar-bottom"><div class="sidebar-doodle">${cup('tea')}<p>Good days are made<br>one small sip at a time.</p></div><div class="utility"><button class="icon-button" data-action="theme" data-focus="theme" aria-label="Switch to ${state.settings.theme === 'light' ? 'dark' : 'light'} theme" title="Change theme">${icon(state.settings.theme === 'light' ? 'sleep' : 'sun')}</button><button class="icon-button" data-action="sound" data-focus="sound" aria-label="${state.settings.sound ? 'Disable' : 'Enable'} sounds" aria-pressed="${state.settings.sound}" title="Toggle sounds">${icon(state.settings.sound ? 'sound' : 'mute')}</button><button class="icon-button" data-action="settings" title="Settings" aria-label="Settings">${icon('settings')}</button><button class="icon-button" data-action="export" title="Export journal" aria-label="Export journal">${icon('download')}</button></div>${accountChip()}</div></aside><main id="main" tabindex="-1"><header class="page-header"><div><p class="eyebrow">${titles[view][0]}</p><h1>${titles[view][1]}</h1></div></header>${warning ? `<div class="warning" role="alert">${esc(warning)} <button class="text-button" data-action="export-json">Export backup</button></div>` : ''}${view === 'today' ? todayView() : view === 'history' ? historyView() : view === 'sleep' ? sleepView() : labView()}<footer class="page-footer"><span>Made for mindful sipping, not perfect numbers.</span><span>Caffeine values are estimates. ${state.settings.halfLife}h half-life model.</span></footer></main></div>`;
   if (focusKey) document.querySelector(`[data-focus="${CSS.escape(focusKey)}"]`)?.focus({ preventScroll: true });
   watchBlendDock();
 }
@@ -309,14 +310,17 @@ function addIngredient(id) {
   $('#mixing-zone')?.classList.add('splashed'); $('.dock-cup')?.classList.add('splashed');
   if (layers.length >= MAX_LAYERS && (!document.activeElement || document.activeElement === document.body)) $('.log-blend')?.focus({ preventScroll: true });
 }
+function download(data, type, name) {
+  const url = URL.createObjectURL(new Blob([data], { type }));
+  const a = document.createElement('a'); a.href = url; a.download = name; a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
 function exportJournal() {
   let data = JSON.stringify(state, null, 2);
   if (loaded.blocked) {
     try { data = storage.getItem(STORE_KEY) || data; } catch { /* Export in-memory data if inaccessible. */ }
   }
-  const url = URL.createObjectURL(new Blob([data], { type: 'application/json' }));
-  const a = document.createElement('a'); a.href = url; a.download = `kaffe-journal-${dayKey()}.json`; a.click();
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  download(data, 'application/json', `kaffe-journal-${dayKey()}.json`);
   notify('Journal backup downloaded.');
 }
 
@@ -476,6 +480,22 @@ async function signOut(force) {
   location.href = '/.auth/logout?post_logout_redirect_uri=%2F';
 }
 
+function exportReport(journal = state, message = 'Caffeine report downloaded.') {
+  download(buildReport(journal), 'application/pdf', `kaffe-report-${dayKey()}.pdf`);
+  notify(message);
+}
+function openExport() {
+  picker.innerHTML = `<div class="dialog-heading"><div><p class="eyebrow">TAKE IT WITH YOU</p><h2 id="picker-title">Export your journal</h2></div><button class="icon-button" data-action="close" aria-label="Close export">${icon('close')}</button></div><div class="export-options"><button class="export-option peach" data-action="export-pdf">${icon('history')}<span><strong>Caffeine report (PDF)</strong><small>Today, this week, this month and all time, with charts and every sip.</small></span></button><button class="export-option sage" data-action="export-json">${icon('download')}<span><strong>Journal backup (JSON)</strong><small>Every entry and setting, for safekeeping.</small></span></button></div><label class="export-file"><span>Have a backup file? Turn it into a report.</span><input type="file" id="backup-file" accept="application/json,.json"></label><p id="form-error" class="form-error" role="alert"></p><p class="small-note">Made on this device. Nothing is uploaded.</p>`;
+  showDialog();
+}
+async function reportFromFile(file) {
+  try {
+    exportReport(normalizeState(JSON.parse(await file.text())), `Report made from ${file.name}.`);
+    picker.close();
+  } catch {
+    $('#form-error').textContent = 'That file does not look like a Kaffe journal backup.';
+  }
+}
 document.addEventListener('click', event => {
   const button = event.target.closest('[data-action]'); if (!button || button.disabled) return;
   const d = button.dataset;
@@ -483,7 +503,9 @@ document.addEventListener('click', event => {
     case 'navigate': location.hash = d.view; break;
     case 'theme': state.settings.theme = state.settings.theme === 'light' ? 'dark' : 'light'; commit(); break;
     case 'sound': state.settings.sound = !state.settings.sound; commit(); notify(`Sounds ${state.settings.sound ? 'on' : 'off'}.`); break;
-    case 'export': exportJournal(); break;
+    case 'export': openExport(); break;
+    case 'export-json': exportJournal(); if (picker.open) picker.close(); break;
+    case 'export-pdf': exportReport(); picker.close(); break;
     case 'settings': openSettings(); break;
     case 'account': openAccount(); break;
     case 'sync-now': syncNow(true); break;
@@ -541,6 +563,7 @@ document.addEventListener('change', event => {
   const { id, value } = event.target;
   if (id === 'history-date' && /^\d{4}-\d{2}-\d{2}$/.test(value) && value <= dayKey()) { turnTo(value); render(); $('#history-date')?.focus({ preventScroll: true }); }
   if (id === 'bedtime' && validTime(value)) { state.settings.bedtime = value; commit(); }
+  if (id === 'backup-file' && event.target.files[0]) reportFromFile(event.target.files[0]);
   if (event.target.name === 'pulse-mode') {
     state.settings.pulse = value; commit(`Caffeine effects: ${EFFECT_MODES.find(m => m[0] === value)[1]}.`);
     $('#effects-note').textContent = effectsNote(value);
