@@ -81,6 +81,57 @@ test('unreadable v2 is protected and unavailable storage does not crash', () => 
   assert.equal(corrupt.blocked, true); assert.ok(corrupt.warning);
   assert.ok(loadState({ getItem() { throw new Error('denied'); } }).warning);
 });
+
+test('half-life estimate combines factors, rounds to the slider, and flags clamping', () => {
+  assert.equal(estimateHalfLife().value, 5);
+  assert.equal(estimateHalfLife({ smoke: 'yes' }).value, 3);
+  assert.equal(estimateHalfLife({ hormonal: 'yes' }).value, 8);
+  assert.equal(estimateHalfLife({ smoke: 'yes', hormonal: 'yes' }).value, 5.5);
+  assert.equal(estimateHalfLife({ pregnancy: 't1' }).value, 6.5);
+  assert.equal(estimateHalfLife({ pregnancy: 't3' }).capped, 'high');
+  assert.equal(estimateHalfLife({ meds: 'unsure', pregnancy: 'no' }).factors.length, 0);
+});
+
+test('caffeine effects default to heartbeat, persist all three modes, and migrate the old switch', () => {
+  const pulse = settings => normalizeState({ version: 2, entries: [], settings }).settings.pulse;
+  assert.equal(pulse({}), 'on');
+  for (const mode of ['off', 'on', 'ultra']) assert.equal(pulse({ pulse: mode }), mode);
+  assert.equal(pulse({ pulse: false }), 'off');
+  assert.equal(pulse({ pulse: true }), 'on');
+  assert.equal(pulse({ pulse: 'max' }), 'on');
+});
+
+test('sync merge keeps new entries from both sides and respects deletions since the last sync', () => {
+  const journal = (...entries) => normalizeState({ version: 2, entries, settings: {} });
+  const a = coffee(100, at, 'a'), b = coffee(80, at + HOUR, 'b'), c = coffee(60, at + 2 * HOUR, 'c'), d = coffee(40, at + 3 * HOUR, 'd');
+  // Base had a and b. Locally b was deleted and c added; the account added d.
+  const merged = mergeJournals(journal(a, c), journal(a, b, d), ['a', 'b']);
+  assert.deepEqual(merged.entries.map(e => e.id), ['a', 'c', 'd']);
+  // With no shared history (a guest journal meets an account), nothing is dropped.
+  assert.deepEqual(mergeJournals(journal(c), journal(a, b), []).entries.map(e => e.id), ['a', 'b', 'c']);
+  // An entry edited locally keeps the local time.
+  assert.equal(mergeJournals(journal({ ...a, time: at + 5 * HOUR }), journal(a), ['a']).entries[0].time, at + 5 * HOUR);
+});
+test('sign-in plan never leaks one account’s journal into another or drops local entries', () => {
+  const journal = (...entries) => normalizeState({ version: 2, entries, settings: {} });
+  const local = journal(coffee(100, at, 'mine')), cloud = journal(coffee(90, at, 'theirs'));
+  // Another account synced on this device last: start from this account's copy only.
+  assert.deepEqual(planSync({ local, cloud, meta: { user: 'other', base: ['mine'], dirty: true }, user: 'me' }).state.entries.map(e => e.id), ['theirs']);
+  assert.deepEqual(planSync({ local, cloud: null, meta: { user: 'other', base: [], dirty: false }, user: 'me' }).state.entries, []);
+  // Guest data on first sign-in is merged and uploaded.
+  const guest = planSync({ local, cloud, meta: null, user: 'me' });
+  assert.equal(guest.upload, true); assert.equal(guest.state.entries.length, 2);
+  // Nothing changed locally: the account's copy wins as is.
+  const clean = planSync({ local, cloud, meta: { user: 'me', base: ['mine'], dirty: false }, user: 'me' });
+  assert.equal(clean.state, cloud); assert.equal(clean.upload, false);
+  // No account copy yet: upload this device's journal.
+  assert.deepEqual(planSync({ local, cloud: null, meta: null, user: 'me' }), { state: local, upload: true });
+});
+test('sync metadata is read defensively', () => {
+  assert.equal(loadSyncMeta(storage({ [SYNC_KEY]: '{broken' })), null);
+  assert.equal(loadSyncMeta(storage({ [SYNC_KEY]: '{"user":1}' })), null);
+  assert.deepEqual(loadSyncMeta(storage({ [SYNC_KEY]: JSON.stringify({ user: 'u', name: 'jf', base: ['a', 2], updatedAt: 5, dirty: true }) })), { user: 'u', name: 'jf', base: ['a'], updatedAt: 5, syncedAt: 0, dirty: true });
+});
 test('PDF report is a well-formed document covering every period and entry', async () => {
   const { buildReport, reportData, WIDTHS, encode } = await import('../report.js');
   assert.equal(WIDTHS.regular.length, 95); assert.equal(WIDTHS.bold.length, 95);
