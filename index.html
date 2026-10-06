@@ -1,14 +1,14 @@
 <!doctype html>
-<html lang="en" data-theme="light">
+<html lang="nb" data-theme="light">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#f7f4ec">
-  <meta name="description" content="Your little coffee journal. Track caffeine, sip water, plan your wind-down, and play in the Blend Lab.">
+  <meta name="description" content="Din lille kaffedagbok. Følg med på koffein, drikk vann, planlegg kvelden og lek i Blandelabben.">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="apple-mobile-web-app-title" content="Kaffe">
-  <title>Kaffe — a little coffee journal</title>
+  <title>Kaffe — en liten kaffedagbok</title>
   <link rel="icon" type="image/svg+xml" href="./icon.svg">
   <link rel="apple-touch-icon" href="./icon.svg">
   <link rel="manifest" href="./manifest.json">
@@ -18,16 +18,17 @@
       const saved = JSON.parse(localStorage.getItem('kaffe-journal-v2') || 'null');
       const theme = saved?.settings?.theme || localStorage.getItem('kaffe-theme') || 'light';
       document.documentElement.dataset.theme = theme === 'dark' ? 'dark' : 'light';
+      if (saved?.settings?.lang === 'en') document.documentElement.lang = 'en';
     } catch {}
   </script>
   <script type="module" src="./app.js"></script>
 </head>
 <body>
-  <a class="skip-link" href="#main">Skip to journal</a>
-  <div id="app"><p class="loading">Opening your coffee journal…</p></div>
+  <a class="skip-link" href="#main">Hopp til dagboken</a>
+  <div id="app"><p class="loading">Åpner kaffedagboken…</p></div>
   <div class="pulse" aria-hidden="true"></div>
   <dialog id="picker" aria-labelledby="picker-title"></dialog>
   <div id="toast" class="toast" role="status" aria-live="polite" aria-atomic="true"></div>
-  <noscript><p class="loading">Please enable JavaScript to use your coffee journal. Your data stays in this browser.</p></noscript>
+  <noscript><p class="loading">Slå på JavaScript for å bruke kaffedagboken. Dataene dine blir i denne nettleseren.</p></noscript>
 </body>
 </html>

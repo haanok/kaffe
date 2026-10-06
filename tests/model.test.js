@@ -75,6 +75,10 @@ test('normalization rejects invalid records/settings and deduplicates IDs', () =
   const result = normalizeState({ version: 2, entries: [coffee(), coffee(), { ...coffee(), mg: -1 }, { ...coffee(), time: 'bad' }], settings: { halfLife: 0, bedtime: '25:00', theme: 'evil', sound: true } });
   assert.equal(result.entries.length, 2); assert.notEqual(result.entries[0].id, result.entries[1].id);
   assert.equal(result.settings.halfLife, 5); assert.equal(result.settings.bedtime, '23:00'); assert.equal(result.settings.theme, 'light');
+  assert.equal(result.settings.lang, 'no');
+  assert.equal(normalizeState({ version: 2, entries: [], settings: { lang: 'en' } }).settings.lang, 'en');
+  assert.equal(normalizeState({ version: 2, entries: [], settings: { lang: 'de' } }).settings.lang, 'no');
+  assert.equal(normalizeState({ version: 2, entries: [] }).settings.sound, true);
 });
 test('unreadable v2 is protected and unavailable storage does not crash', () => {
   const corrupt = loadState(storage({ [STORE_KEY]: '{broken' }));

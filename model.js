@@ -1,8 +1,9 @@
 import { DRINK_BY_ID } from './data.js';
+import { locale, LANGS, DEFAULT_LANG } from './i18n.js';
 
 export const STORE_KEY = 'kaffe-journal-v2';
 export const HOUR = 3600000;
-export const DEFAULT_SETTINGS = { theme: 'light', sound: false, bedtime: '23:00', halfLife: 5, pulse: 'on' };
+export const DEFAULT_SETTINGS = { theme: 'light', lang: DEFAULT_LANG, sound: true, bedtime: '23:00', halfLife: 5, pulse: 'on' };
 export const uid = () => globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 export function dayKey(time = Date.now()) {
   const d = new Date(time);
@@ -13,7 +14,7 @@ export function timeValue(time = Date.now()) {
   return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
 }
 export const validTime = value => /^([01]\d|2[0-3]):[0-5]\d$/.test(value);
-export const fmtTime = time => new Date(time).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+export const fmtTime = time => new Date(time).toLocaleTimeString(locale(), { hour: 'numeric', minute: '2-digit' });
 export function nextBedtime(value, now = Date.now()) {
   const d = new Date(now);
   const [h, m] = value.split(':').map(Number);
@@ -77,6 +78,7 @@ export function normalizeState(raw) {
   if (!raw || raw.version !== 2 || !Array.isArray(raw.entries)) throw new Error('Unsupported journal data');
   const settings = { ...DEFAULT_SETTINGS };
   if (['light', 'dark'].includes(raw.settings?.theme)) settings.theme = raw.settings.theme;
+  if (LANGS.some(([id]) => id === raw.settings?.lang)) settings.lang = raw.settings.lang;
   if (typeof raw.settings?.sound === 'boolean') settings.sound = raw.settings.sound;
   // 'off' | 'on' (heartbeat) | 'ultra'. Earlier builds stored a boolean switch.
   const pulse = raw.settings?.pulse;
@@ -95,7 +97,7 @@ export function loadState(storage) {
     const saved = storage.getItem(STORE_KEY);
     if (saved !== null) {
       try { return { state: normalizeState(JSON.parse(saved)), warning: '' }; }
-      catch { return { state: empty, warning: 'Saved journal could not be read. Existing data is untouched. Export a backup before making changes.', blocked: true }; }
+      catch { return { state: empty, warning: 'warn.unreadable', blocked: true }; }
     }
     // Keep legacy keys intact, and migrate every still-available record, even
     // if the old UTC date tag no longer equals today's local date.
@@ -111,7 +113,7 @@ export function loadState(storage) {
     if (sound) empty.settings.sound = sound !== 'off';
     return { state: normalizeState(empty), warning: '' };
   } catch {
-    return { state: empty, warning: 'Browser storage is unavailable or legacy data is unreadable. Changes may not survive a reload.' };
+    return { state: empty, warning: 'warn.storage' };
   }
 }
 export function makeDrink(drink, amount = 1, time = Date.now()) {
@@ -128,7 +130,7 @@ export const HALF_LIFE_FACTORS = {
   meds: { yes: [2.5, 'A medication that slows caffeine clearance', 'much slower'] },
 };
 export function estimateHalfLife(answers = {}) {
-  const factors = Object.entries(HALF_LIFE_FACTORS).flatMap(([key, options]) => options[answers[key]] ? [{ key, multiplier: options[answers[key]][0], label: options[answers[key]][1], effect: options[answers[key]][2] }] : []);
+  const factors = Object.entries(HALF_LIFE_FACTORS).flatMap(([key, options]) => options[answers[key]] ? [{ key, answer: answers[key], multiplier: options[answers[key]][0], label: options[answers[key]][1], effect: options[answers[key]][2] }] : []);
   const raw = factors.reduce((value, f) => value * f.multiplier, HALF_LIFE_BASE);
   const value = Math.min(8, Math.max(3, Math.round(raw * 2) / 2));
   return { value, raw, factors, capped: raw > 8 ? 'high' : raw < 3 ? 'low' : null };

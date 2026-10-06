@@ -24,6 +24,8 @@ try {
   for (const [engineName, engine, viewport] of [['chromium', chromium, { width: 1440, height: 1000 }], ['webkit', webkit, { width: 390, height: 844 }]]) {
     browser = await engine.launch();
     const context = await browser.newContext({ viewport, timezoneId: 'Europe/Oslo', reducedMotion: 'reduce', ...(engineName === 'webkit' ? { isMobile: true, hasTouch: true } : {}) });
+    // These flows are written against the English interface; Norwegian is covered below.
+    await context.addInitScript(() => { if (!localStorage.getItem('kaffe-journal-v2')) localStorage.setItem('kaffe-journal-v2', JSON.stringify({ version: 2, entries: [], settings: { lang: 'en' } })); });
     const page = await context.newPage(), errors = [], external = [];
     page.on('pageerror', error => errors.push(error.message));
     page.on('request', request => { if (!request.url().startsWith(origin) && !request.url().startsWith('data:')) external.push(request.url()); });
@@ -169,6 +171,20 @@ try {
     await browser.close(); browser = null;
   }
   browser = await chromium.launch();
+  const fresh = await browser.newPage();
+  await fresh.goto(origin);
+  await fresh.getByRole('heading', { name: 'Dagens brygg.' }).waitFor();
+  assert.equal(await fresh.locator('html').getAttribute('lang'), 'nb');
+  assert.equal(await fresh.getByRole('button', { name: 'Slå av lyder' }).getAttribute('aria-pressed'), 'true');
+  await fresh.getByRole('button', { name: 'Innstillinger' }).click();
+  await fresh.locator('label.chip', { hasText: 'English' }).click();
+  await fresh.getByRole('heading', { name: 'Your daily brew.' }).waitFor();
+  assert.equal((await journal(fresh)).settings.lang, 'en');
+  await fresh.reload();
+  await fresh.getByRole('heading', { name: 'Your daily brew.' }).waitFor();
+  assert.equal(await fresh.locator('html').getAttribute('lang'), 'en');
+  await fresh.close();
+  console.log('PASS language: Norwegian and sound on by default, English switch persists');
   const page = await browser.newPage();
   await page.addInitScript(() => {
     if (!localStorage.getItem('seeded')) {

@@ -32,7 +32,7 @@ A caffeine tracker that takes health seriously without becoming clinical. Sleep 
 ## Capabilities and Constraints
 
 - **Local-first, no account (binding).** Journal data lives only in the browser on that origin. There is no backend, sign-in, or sync. Export to a JSON backup or a PDF caffeine report (today, week, month, all time) exists; a JSON backup can be turned into a PDF report, but import does not exist yet.
-- Current implementation: plain HTML, CSS, and ES modules with no runtime dependencies or build step, deployed to Azure Static Web Apps via `npm run package:site`. The user has not made no-build, English-only, or phone-first binding. They describe the current state and future work may revisit them.
+- Current implementation: plain HTML, CSS, and ES modules with no runtime dependencies or build step, deployed to Azure Static Web Apps via `npm run package:site`. The interface is Norwegian by default with an English switch in Settings (all text lives in `i18n.js`). The user has not made no-build or phone-first binding. They describe the current state and future work may revisit them.
 - Caffeine and kcal values in `data.js` are catalog estimates per serving. The half-life is user-adjustable and defaults to 5 h. The 400 mg/day figure is a general reference for healthy adults, not a limit. The sleep threshold is not a proven "sleep-safe" level.
 - Terminology in use: "journal", "sip", "Blend Lab", "reference" (not "limit"), "wind-down".
 - Undecided: journal import, localization, a PNG icon fallback for iOS home screen.
