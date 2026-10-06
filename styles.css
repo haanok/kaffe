@@ -304,3 +304,52 @@ body{background:color-mix(in srgb,var(--bg),var(--pulse) calc(var(--buzz) * 8%))
 .lab-docked .toast{bottom:calc(152px + env(safe-area-inset-bottom))}
 .lab-docked main{padding-bottom:180px}
 }
+/* Account: sidebar chip and sign-in dialog */
+.account-chip{display:flex;align-items:center;gap:10px;width:100%;margin-top:14px;padding:9px 10px;border:1px solid var(--line);border-radius:14px;background:var(--paper);color:var(--ink);text-align:left;transition:border-color .15s,transform .15s}
+.account-chip:hover{border-color:var(--accent)}
+.account-chip[data-status=local]{border-style:dashed}
+.avatar{position:relative;flex-shrink:0;display:inline-grid;place-items:center;border-radius:50%;background:var(--accent-soft);color:var(--accent);font-weight:750;overflow:hidden}
+.avatar:before{content:attr(data-initial)}
+.avatar.small{width:32px;height:32px;font-size:13px}
+.avatar.large{width:58px;height:58px;font-size:23px}
+.avatar img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.avatar.cloud:before{content:none}
+.avatar.cloud .icon{width:18px;height:18px}
+.account-text{min-width:0;display:flex;flex-direction:column;gap:3px}
+.account-text strong{font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sync-line{display:flex;align-items:center;gap:5px;font-size:10px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sync-dot{width:7px;height:7px;border-radius:50%;background:var(--muted);flex-shrink:0}
+[data-status=local] .sync-dot{display:none}
+[data-status=synced] .sync-dot{background:#5f9a53}
+[data-status=checking] .sync-dot,[data-status=syncing] .sync-dot{background:var(--accent);animation:sync-blink 1s ease-in-out infinite}
+[data-status=offline] .sync-dot{background:#c99a3c}
+[data-status=expired] .sync-dot,[data-status=error] .sync-dot{background:#c4553d}
+@keyframes sync-blink{50%{opacity:.25}}
+@media(prefers-reduced-motion:reduce){.sync-dot{animation:none!important}}
+.account-hero{display:flex;align-items:flex-end;justify-content:center;gap:2px;padding:20px 0 4px;margin-bottom:20px;border-radius:18px;background:var(--peach)}
+.account-hero .cup-art{width:104px}
+.account-hero .cup-art:last-child{width:80px;transform:rotate(8deg)}
+.hero-cloud{align-self:flex-start;width:48px;height:48px;border-radius:50%;background:var(--paper);display:grid;place-items:center;color:var(--accent);box-shadow:0 6px 18px #47342514}
+.hero-cloud .icon{width:24px;height:24px}
+.account-perks{list-style:none;padding:0;margin:0 0 18px;display:grid;gap:14px}
+.account-perks li{display:flex;gap:12px;align-items:flex-start}
+.perk-icon{width:36px;height:36px;border-radius:11px;background:var(--soft);display:grid;place-items:center;flex-shrink:0}
+.perk-icon .icon{width:19px;height:19px}
+.account-perks strong{display:block;font-size:14px;margin-bottom:2px}
+.account-perks span{font-size:12px;color:var(--muted);line-height:1.5}
+.account-merge{display:flex;gap:8px;align-items:center;font-size:12px;line-height:1.5;background:var(--sage);border-radius:12px;padding:10px 12px;margin-bottom:14px}
+.account-merge .icon{width:16px;height:16px;flex-shrink:0}
+.account-lead{font-size:13px;line-height:1.7;margin-bottom:18px}
+.github-button{background:var(--ink);color:var(--paper);text-decoration:none}
+.github-button .icon{width:20px;height:20px}
+.button.subtle{background:var(--soft);color:var(--ink)}
+.account-card{display:flex;align-items:center;gap:14px;padding:16px;border:1px solid var(--line);border-radius:18px}
+.account-card strong{display:block;font-size:18px;overflow-wrap:anywhere}
+.account-card span{font-size:12px;color:var(--muted)}
+.account-sync{display:flex;align-items:center;gap:8px;margin:16px 2px 6px;font-size:13px}
+.account-sync .text-button{margin:0 0 0 auto;padding:5px 0}
+.account-count{font-size:12px;color:var(--muted);line-height:1.6;margin:0 2px 18px}
+dialog .warning{margin-bottom:14px}
+@media(max-width:1000px) and (min-width:761px){.account-chip{width:auto;margin:12px auto 0;padding:4px;border-color:transparent;background:transparent}.account-text{display:none}}
+@media(max-width:760px){.sidebar-bottom{display:flex;align-items:center;gap:4px}.account-chip{width:35px;height:35px;margin:0;padding:0;border:0;background:transparent;justify-content:center}.account-text{display:none}.avatar.small{width:29px;height:29px;font-size:12px}.account-hero .cup-art{width:84px}.account-hero .cup-art:last-child{width:66px}}
+@media(max-width:360px){.sidebar-bottom{right:10px;gap:2px}.utility{gap:2px}.utility .icon-button,.account-chip{width:31px;height:31px}}
