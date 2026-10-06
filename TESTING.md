@@ -22,7 +22,7 @@ npm start
 
 Open http://127.0.0.1:4173. Screenshots are in ignored `test-results/`.
 
-`npm run package:site` creates `dist/` with only eleven allowlisted public files. It copies assets, without compiling or bundling. Never deploy the repository root: local configuration and tooling do not belong on the web.
+`npm run package:site` creates `dist/` with only twelve allowlisted public files. It copies assets, without compiling or bundling. Never deploy the repository root: local configuration and tooling do not belong on the web.
 
 ## Publish an isolated Azure preview (not production)
 
@@ -64,4 +64,4 @@ Data is stored only in that browser on that exact origin. Preview, production, l
 
 The ignored `.continue/agents/new-config.yaml` now references `${{ secrets.OPENROUTER_API_KEY }}` instead of embedding a key. Revoke the previously exposed key in OpenRouter and configure a replacement through Continue's secret mechanism before starting a new session. Do not paste the replacement into chat or commit it. This credential is for the development assistant, not the Kaffe app; rotation has not been performed automatically.
 
-The service-worker cache is `kaffe-journal-v16`. Increment it in `sw.js` whenever public app files change, then rerun tests and packaging. Azure headers request HTTP revalidation; service-worker caching still provides offline use.
+The service-worker cache is `kaffe-journal-v26`. Increment it in `sw.js` whenever public app files change, then rerun tests and packaging. Azure headers request HTTP revalidation; service-worker caching still provides offline use.
