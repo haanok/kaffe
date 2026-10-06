@@ -2,7 +2,7 @@ import { DRINK_BY_ID } from './data.js';
 
 export const STORE_KEY = 'kaffe-journal-v2';
 export const HOUR = 3600000;
-export const DEFAULT_SETTINGS = { theme: 'light', sound: false, bedtime: '23:00', halfLife: 5 };
+export const DEFAULT_SETTINGS = { theme: 'light', sound: false, bedtime: '23:00', halfLife: 5, pulse: 'on' };
 export const uid = () => globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 export function dayKey(time = Date.now()) {
   const d = new Date(time);
@@ -78,6 +78,10 @@ export function normalizeState(raw) {
   const settings = { ...DEFAULT_SETTINGS };
   if (['light', 'dark'].includes(raw.settings?.theme)) settings.theme = raw.settings.theme;
   if (typeof raw.settings?.sound === 'boolean') settings.sound = raw.settings.sound;
+  // 'off' | 'on' (heartbeat) | 'ultra'. Earlier builds stored a boolean switch.
+  const pulse = raw.settings?.pulse;
+  if (['off', 'on', 'ultra'].includes(pulse)) settings.pulse = pulse;
+  else if (typeof pulse === 'boolean') settings.pulse = pulse ? 'on' : 'off';
   if (validTime(raw.settings?.bedtime)) settings.bedtime = raw.settings.bedtime;
   if (Number.isFinite(raw.settings?.halfLife) && raw.settings.halfLife >= 3 && raw.settings.halfLife <= 8) settings.halfLife = raw.settings.halfLife;
   const entries = raw.entries.map(e => normalizeEntry(e)).filter(Boolean);
@@ -112,4 +116,84 @@ export function loadState(storage) {
 }
 export function makeDrink(drink, amount = 1, time = Date.now()) {
   return { id: uid(), kind: 'drink', drink: drink.id || null, name: drink.name, cat: drink.cat || 'coffee', amount, mg: Math.round(drink.mg * amount), kcal: Math.round(drink.kcal * amount), time };
+}
+// A rough personal starting point for the half-life setting, from average
+// effects reported for groups of people. Individuals vary widely; the UI must
+// present this as an estimate, never as a measurement or medical advice.
+export const HALF_LIFE_BASE = 5;
+export const HALF_LIFE_FACTORS = {
+  smoke: { yes: [0.6, 'Smoking or nicotine', 'faster'] },
+  hormonal: { yes: [1.8, 'Hormonal birth control', 'slower'] },
+  pregnancy: { t1: [1.3, 'Pregnancy, 1st trimester', 'slower'], t2: [1.8, 'Pregnancy, 2nd trimester', 'slower'], t3: [2.5, 'Pregnancy, 3rd trimester', 'slower'] },
+  meds: { yes: [2.5, 'A medication that slows caffeine clearance', 'much slower'] },
+};
+export function estimateHalfLife(answers = {}) {
+  const factors = Object.entries(HALF_LIFE_FACTORS).flatMap(([key, options]) => options[answers[key]] ? [{ key, multiplier: options[answers[key]][0], label: options[answers[key]][1], effect: options[answers[key]][2] }] : []);
+  const raw = factors.reduce((value, f) => value * f.multiplier, HALF_LIFE_BASE);
+  const value = Math.min(8, Math.max(3, Math.round(raw * 2) / 2));
+  return { value, raw, factors, capped: raw > 8 ? 'high' : raw < 3 ? 'low' : null };
+}
+
+// Cloud sync. SYNC_KEY remembers who this device last synced with, the
+// server version it saw, and which entry IDs both sides shared at that point.
+// That shared ID set is the base of a three-way merge, so an entry deleted on
+// one device is not resurrected by another device's copy.
+export const SYNC_KEY = 'kaffe-sync-v1';
+export function loadSyncMeta(storage) {
+  try {
+    const meta = JSON.parse(storage.getItem(SYNC_KEY) || 'null');
+    if (!meta || typeof meta.user !== 'string' || !Array.isArray(meta.base)) return null;
+    return { user: meta.user, name: typeof meta.name === 'string' ? meta.name : '', base: meta.base.filter(id => typeof id === 'string'), updatedAt: Number(meta.updatedAt) || 0, syncedAt: Number(meta.syncedAt) || 0, dirty: meta.dirty === true };
+  } catch { return null; }
+}
+export function mergeJournals(local, cloud, base = []) {
+  const known = new Set(base), localIds = new Set(local.entries.map(e => e.id)), cloudById = new Map(cloud.entries.map(e => [e.id, e]));
+  // Local edits win for entries on both sides; one-sided entries are kept only
+  // when they are new since the last sync, not when the other side deleted them.
+  const entries = [
+    ...local.entries.filter(e => cloudById.has(e.id) || !known.has(e.id)),
+    ...cloud.entries.filter(e => !localIds.has(e.id) && !known.has(e.id)),
+  ].sort((a, b) => a.time - b.time);
+  return normalizeState({ version: 2, entries, settings: local.settings });
+}
+// Decide what a sign-in does with the journal on this device:
+// - another account synced here last: its copy lives in that account, start from ours;
+// - nothing changed here since the last sync: take the account's journal;
+// - otherwise merge, so nothing logged on this device is lost.
+export function planSync({ local, cloud, meta, user }) {
+  if (meta && meta.user !== user) return { state: cloud || normalizeState({ version: 2, entries: [], settings: local.settings }), upload: !cloud };
+  if (!cloud) return { state: local, upload: true };
+  if (meta && !meta.dirty) return { state: cloud, upload: false };
+  const merged = mergeJournals(local, cloud, meta ? meta.base : []);
+  const cloudTimes = new Map(cloud.entries.map(e => [e.id, e.time]));
+  const same = merged.entries.length === cloud.entries.length && merged.entries.every(e => cloudTimes.get(e.id) === e.time) && JSON.stringify(merged.settings) === JSON.stringify(cloud.settings);
+  return { state: same && meta ? cloud : merged, upload: !same || !meta };
+}
+export class CloudError extends Error {
+  constructor(status, message) { super(message); this.status = status; }
+}
+async function cloudRequest(options) {
+  let res;
+  try { res = await fetch('/api/state', { credentials: 'same-origin', redirect: 'manual', ...options }); }
+  catch { throw new CloudError(0, 'Offline'); }
+  // An opaque redirect means the session ended and the platform wants a login.
+  if (res.type === 'opaqueredirect' || res.status === 401 || res.status === 403) throw new CloudError(401, 'Signed out');
+  return res;
+}
+export async function fetchCloudState() {
+  const res = await cloudRequest({ headers: { Accept: 'application/json' } });
+  if (res.status === 404) return null;
+  if (!res.ok) throw new CloudError(res.status, 'Could not load cloud journal');
+  const raw = await res.json();
+  return { state: normalizeState(raw), updatedAt: Number(raw.updatedAt) || 0 };
+}
+export async function saveCloudState(state, baseUpdatedAt, keepalive = false) {
+  const res = await cloudRequest({
+    method: 'POST',
+    keepalive,
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ version: 2, entries: state.entries, settings: state.settings, baseUpdatedAt }),
+  });
+  if (!res.ok) throw new CloudError(res.status, 'Could not save to cloud');
+  return Number((await res.json()).updatedAt) || 0;
 }

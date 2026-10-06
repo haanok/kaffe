@@ -22,6 +22,7 @@ self.addEventListener('fetch', event => {
   if (request.method !== 'GET') return;
   const url = new URL(request.url);
   if (url.origin !== self.location.origin) return;
+  if (url.pathname.startsWith('/.auth/') || url.pathname.startsWith('/api/')) return;
   if (request.mode === 'navigate' && url.href.startsWith(self.registration.scope)) {
     event.respondWith(caches.open(CACHE_NAME).then(async cache =>
       (await cache.match('./index.html')) || fetch(request)));

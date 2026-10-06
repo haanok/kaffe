@@ -9,5 +9,21 @@
     ".js": "text/javascript",
     ".json": "application/json",
     ".svg": "image/svg+xml"
-  }
+  },
+  "routes": [
+    {
+      "route": "/api/*",
+      "allowedRoles": [
+        "authenticated"
+      ]
+    },
+    {
+      "route": "/.auth/login/aad",
+      "statusCode": 404
+    },
+    {
+      "route": "/.auth/login/twitter",
+      "statusCode": 404
+    }
+  ]
 }

@@ -9,9 +9,13 @@ let storage;
 try { storage = window.localStorage; } catch { storage = { getItem() { throw new Error('Storage unavailable'); } }; }
 const loaded = loadState(storage);
 const state = loaded.state;
+// Account sync: authUser is the signed-in GitHub principal (or null), and
+// syncMeta is this device's record of its last sync (see SYNC_KEY in model.js).
+let authUser = null, syncMeta = loadSyncMeta(storage), revision = 0;
+let syncStatus = syncMeta ? 'checking' : 'local', syncTimer = null, syncRun = null, syncAgain = false, signOutError = false;
 let warning = loaded.warning;
 let view = 'today', historyRange = 7, selectedDay = dayKey(), layers = [], ingredientCategory = 'All';
-let sleepEntrance = false, undo = null, toastTimer, modalDrink = null, modalAmount = 1, modalCategory = 'all', modalQuery = '', audio;
+let sleepEntrance = false, historyMotion = '', historyFigures = null, undo = null, toastTimer, modalDrink = null, modalAmount = 1, modalCategory = 'all', modalQuery = '', audio;
 const app = $('#app'), picker = $('#picker');
 const icons = {
   cup: '<path d="M5 8h12v7a5 5 0 0 1-5 5H10a5 5 0 0 1-5-5Z"/><path d="M17 9h2a3 3 0 0 1 0 6h-2M8 3v2m4-2v2m4-2v2"/>',
@@ -30,6 +34,10 @@ const icons = {
   shuffle: '<path d="m3 5 4 0 10 14h4m-4-4 4 4-4 4M3 19h4L17 5h4m-4-4 4 4-4 4"/>',
   settings: '<path d="M4 7h9m4 0h3M4 17h3m4 0h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/>',
   download: '<path d="M12 3v12m-5-5 5 5 5-5M4 16v5h16v-5"/>',
+  cloud: '<path d="M7 19h10.5a4.5 4.5 0 0 0 .4-9A6.5 6.5 0 0 0 5.5 9.6 4.7 4.7 0 0 0 7 19Z"/>',
+  devices: '<rect x="2" y="4" width="14" height="10" rx="2"/><path d="M5 18h8"/><rect x="17" y="8" width="5" height="12" rx="1.5"/>',
+  sync: '<path d="M20 11a8 8 0 0 0-14.5-4.5L4 8m0-5v5h5M4 13a8 8 0 0 0 14.5 4.5L20 16m0 5v-5h-5"/>',
+  signout: '<path d="M14 4h4a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-4M10 16l-4-4 4-4M6 12h10"/>',
 };
 const icon = name => `<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${icons[name] || icons.cup}</svg>`;
 function cup(cat = 'coffee', large = false) {
@@ -40,11 +48,20 @@ function cup(cat = 'coffee', large = false) {
     : `<g class="steam" fill="none" stroke="currentColor" stroke-width="3" opacity=".5"><path d="M55 32c-12-12 12-14 0-26M78 28c-12-12 12-14 0-26M100 32c-12-12 12-14 0-26"/></g><path d="M111 57h9c26 0 23 38-6 38h-8" fill="none" stroke="#342921" stroke-width="13"/><path d="M111 57h9c26 0 23 38-6 38h-8" fill="none" stroke="${color}" stroke-width="8"/><path d="M32 45h80l-5 51c-2 28-67 28-70 0Z" fill="${color}" stroke="#342921" stroke-width="3"/><ellipse cx="72" cy="45" rx="40" ry="9" fill="#fff0d8" stroke="#342921" stroke-width="3"/><ellipse cx="72" cy="46" rx="31" ry="5" fill="${cat === 'tea' ? '#6b813e' : cat === 'water' ? '#b6e1ed' : '#78442c'}"/><path d="M48 66v20" stroke="#fff" stroke-width="5" stroke-linecap="round" opacity=".35"/><circle cx="64" cy="81" r="2.5" fill="#342921"/><circle cx="86" cy="81" r="2.5" fill="#342921"/><path d="M69 92q6 7 12 0" fill="none" stroke="#342921" stroke-width="2.5" stroke-linecap="round"/>`;
   return `<svg class="cup-art ${large ? 'large' : ''}" viewBox="0 0 150 140" aria-hidden="true"><ellipse cx="77" cy="123" rx="53" ry="7" fill="#342921" opacity=".09"/>${art}</svg>`;
 }
-function persist() {
-  if (loaded.blocked) { warning = 'Saving paused to protect unreadable data. Export your backup before resetting browser storage.'; return; }
-  try { storage.setItem(STORE_KEY, JSON.stringify(state)); warning = ''; }
-  catch { warning = 'Could not save to this browser. Export a backup to keep your journal.'; }
+
+function saveLocal() {
+  if (loaded.blocked) { warning = 'Saving paused to protect unreadable data. Export your backup before resetting browser storage.'; return false; }
+  try { storage.setItem(STORE_KEY, JSON.stringify(state)); warning = ''; return true; }
+  catch { warning = 'Could not save to this browser. Export a backup to keep your journal.'; return false; }
 }
+// Every user change goes through here: save locally, then mark it for the account.
+function persist() {
+  if (!saveLocal()) return;
+  revision++;
+  if (syncMeta && !syncMeta.dirty) writeSyncMeta({ ...syncMeta, dirty: true });
+  queueCloudSync();
+}
+
 function tick() {
   if (!state.settings.sound) return;
   try {
@@ -73,6 +90,26 @@ function glug(kind) {
     });
   } catch { /* Sound is optional. */ }
 }
+// The whole app feels today's caffeine. From 150 mg a warm pulse appears at
+// the screen edges and quickens toward the 400 mg reference; past it the pulse
+// turns red. It mirrors the day's total, never rewards it, and holds still
+// (as a tint) under reduced motion.
+function heartbeat(total) {
+  const root = document.documentElement;
+  const mode = state.settings.pulse;
+  if (mode === 'off') total = 0;
+  root.dataset.fx = mode;
+  const buzz = Math.min(1, Math.max(0, (total - 150) / 250)), over = Math.min(1, Math.max(0, (total - 400) / 200));
+  root.style.setProperty('--buzz', buzz.toFixed(3));
+  root.style.setProperty('--over', over.toFixed(3));
+  root.style.setProperty('--beat', `${(60 / (56 + buzz * 44 + over * 32)).toFixed(3)}s`);
+  root.dataset.pulse = total > 400 ? 'over' : buzz > 0 ? 'on' : 'off';
+}
+const EFFECT_MODES = [['off', 'Off'], ['on', 'Heartbeat'], ['ultra', 'Ultra']];
+function effectsNote(mode) {
+  const still = matchMedia('(prefers-reduced-motion: reduce)').matches ? ' Your device asks for reduced motion, so effects stay still.' : '';
+  return ({ off: 'No effects. The caffeine meter still changes colour.', on: 'The screen edges pulse faster as you near 400 mg today.', ultra: 'Heartbeat, plus trembling cards, jittery mugs and glitching headlines as you near 400 mg.' })[mode] + still;
+}
 const todayFigures = () => ({ total: sumMg(onDay(state.entries)), active: activeAt(state.entries, Date.now(), state.settings.halfLife) });
 function notify(message, canUndo = false) {
   clearTimeout(toastTimer);
@@ -85,10 +122,12 @@ function render() {
   const active = document.activeElement;
   const focusKey = active?.dataset?.focus;
   document.documentElement.dataset.theme = state.settings.theme;
+  if (!isPouring()) heartbeat(sumMg(onDay(state.entries)));
   $('meta[name="theme-color"]').content = state.settings.theme === 'dark' ? '#242321' : '#f7f4ec';
   const titles = { today: ['A little ritual. A little balance.', 'Your daily brew.'], history: ['Every sip tells a story.', 'The pages so far.'], sleep: ['Make room for a softer evening.', 'Your wind-down.'], lab: ['A dash of this. A splash of that.', 'The Blend Lab.'] };
   app.innerHTML = `<div class="app-shell"><aside class="sidebar"><a href="#today" class="brand" aria-label="Kaffe home">${icon('cup')}<span>kaffe<span class="brand-dot">.</span></span></a><p class="brand-note">a little coffee journal</p><nav aria-label="Main navigation">${[['today', 'Today'], ['history', 'History'], ['sleep', 'Sleep'], ['lab', 'Blend Lab']].map(([id, title]) => `<a class="nav-link ${view === id ? 'selected' : ''}" href="#${id}" aria-label="${title}" ${view === id ? 'aria-current="page"' : ''}>${icon(id)}<span>${title}</span>${view === id ? '<span class="nav-dot"></span>' : ''}</a>`).join('')}</nav><div class="sidebar-bottom"><div class="sidebar-doodle">${cup('tea')}<p>Good days are made<br>one small sip at a time.</p></div><div class="utility"><button class="icon-button" data-action="theme" data-focus="theme" aria-label="Switch to ${state.settings.theme === 'light' ? 'dark' : 'light'} theme" title="Change theme">${icon(state.settings.theme === 'light' ? 'sleep' : 'sun')}</button><button class="icon-button" data-action="sound" data-focus="sound" aria-label="${state.settings.sound ? 'Disable' : 'Enable'} sounds" aria-pressed="${state.settings.sound}" title="Toggle sounds">${icon(state.settings.sound ? 'sound' : 'mute')}</button><button class="icon-button" data-action="settings" title="Sleep settings" aria-label="Sleep settings">${icon('settings')}</button><button class="icon-button" data-action="export" title="Export journal" aria-label="Export journal">${icon('download')}</button></div><p class="local-note">Just yours. Saved on this device.</p></div></aside><main id="main" tabindex="-1"><header class="page-header"><div><p class="eyebrow">${titles[view][0]}</p><h1>${titles[view][1]}</h1></div><div class="header-date"><span class="date-dot"></span>${new Date().toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' })}</div></header>${warning ? `<div class="warning" role="alert">${esc(warning)} <button class="text-button" data-action="export-json">Export backup</button></div>` : ''}${view === 'today' ? todayView() : view === 'history' ? historyView() : view === 'sleep' ? sleepView() : labView()}<footer class="page-footer"><span>Made for mindful sipping, not perfect numbers.</span><span>Caffeine values are estimates. ${state.settings.halfLife}h half-life model.</span></footer></main></div>`;
   if (focusKey) document.querySelector(`[data-focus="${CSS.escape(focusKey)}"]`)?.focus({ preventScroll: true });
+  watchBlendDock();
 }
 function stats(entries) {
   const drinks = entries.filter(e => e.kind === 'drink');
@@ -127,8 +166,25 @@ function historyView() {
   const top = new Map();
   state.entries.filter(e => e.kind === 'drink' && included.has(dayKey(e.time))).forEach(e => top.set(e.name, (top.get(e.name) || 0) + 1));
   const favorites = [...top].sort((a, b) => b[1] - a[1]).slice(0, 5);
-  const max = Math.max(400, ...days.map(d => d.mg));
-  return `<section class="history-summary"><article class="card peach"><p class="eyebrow">DAILY AVERAGE</p><strong>${Math.round(total / historyRange)}<small> mg</small></strong><p>across the last ${historyRange} days</p></article><article class="card sage"><p class="eyebrow">SIPS REMEMBERED</p><strong>${count}<small> drinks</small></strong><p>${days.reduce((s, d) => s + d.water, 0)} glasses of water, too</p></article><article class="card lilac"><p class="eyebrow">UNDER THE REFERENCE</p><strong>${days.filter(d => d.mg <= 400).length}<small> / ${historyRange}</small></strong><p>days at or below 400 mg*</p></article></section><section class="card history-chart-card"><div class="section-heading"><div><p class="eyebrow">YOUR REAL LOGS. NO DEMO DATA.</p><h2>A bird’s-eye brew</h2></div><div class="segmented" role="group" aria-label="History range">${[7, 30].map(n => `<button data-action="range" data-value="${n}" data-focus="range-${n}" aria-pressed="${historyRange === n}" class="${historyRange === n ? 'selected' : ''}">${n === 7 ? 'Week' : 'Month'}</button>`).join('')}</div></div><div class="history-chart ${historyRange === 30 ? 'month' : ''}">${days.map(d => `<button class="history-bar ${selectedDay === d.key ? 'selected' : ''}" data-action="day" data-day="${d.key}" data-focus="day-${d.key}" aria-pressed="${selectedDay === d.key}" aria-label="${new Date(d.time).toLocaleDateString()}: ${d.mg} milligrams"><span class="bar-value">${d.mg}</span><span class="bar-track"><span style="height:${Math.max(2, d.mg / max * 100)}%" class="${d.mg > 400 ? 'over' : ''}"></span></span><span class="bar-label">${historyRange === 7 ? new Date(d.time).toLocaleDateString([], { weekday: 'short' }) : new Date(d.time).getDate()}</span></button>`).join('')}</div><p class="small-note">Select a day to turn the page. *Unlogged days count as zero; this is a log summary, not a health score.</p></section><section class="history-bottom"><div><div class="section-heading"><h2>The daily pages</h2><label class="date-picker"><span class="sr-only">Journal date</span><input type="date" id="history-date" value="${selectedDay}" max="${dayKey()}"></label></div><p class="eyebrow day-heading">${new Date(selectedDay + 'T12:00:00').toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}</p>${entryList(onDay(state.entries, selectedDay))}</div><article class="card favorites"><p class="eyebrow">THE REGULARS</p><h2>Your favorites</h2>${favorites.length ? favorites.map(([name, n], i) => `<div class="favorite-row"><span class="rank">0${i + 1}</span><strong>${esc(name)}</strong><span>${n}×</span></div>`).join('') : '<p class="muted">Your most-logged drinks will find a home here.</p>'}<button class="text-button" data-action="export">${icon('download')}Export your journal</button></article></section>`;
+  const max = Math.max(450, ...days.map(d => d.mg)) * 1.08;
+  const month = historyRange === 30, under = days.filter(d => d.mg <= 400).length;
+  const page = onDay(state.entries, selectedDay), pageDrinks = page.filter(e => e.kind === 'drink'), pageWater = page.length - pageDrinks.length;
+  const today = dayKey(), yesterday = dayKey(Date.now() - 864e5);
+  const pageTitle = selectedDay === today ? 'Today' : selectedDay === yesterday ? 'Yesterday' : new Date(`${selectedDay}T12:00:00`).toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' });
+  const motion = historyMotion; historyMotion = '';
+  historyFigures = { average: Math.round(total / historyRange), count, under };
+  const step = Math.round(360 / days.length);
+  return `<dl class="facts history-facts"><div><dt>Daily average</dt><dd data-figure="average">${Math.round(total / historyRange)}<small> mg</small></dd><dd class="facts-note">across the last ${historyRange} days</dd></div><div><dt>Drinks logged</dt><dd data-figure="count">${count}</dd><dd class="facts-note">plus ${days.reduce((s, d) => s + d.water, 0)} glasses of water</dd></div><div><dt>At or under 400 mg*</dt><dd data-figure="under">${under}<small> of ${historyRange} days</small></dd></div></dl><section class="card history-chart-card ${motion === 'grow' ? 'grow' : ''}"><div class="section-heading"><h2>Last ${historyRange} days</h2><div class="segmented" role="group" aria-label="History range">${[7, 30].map(n => `<button data-action="range" data-value="${n}" data-focus="range-${n}" aria-pressed="${historyRange === n}" class="${historyRange === n ? 'selected' : ''}">${n === 7 ? 'Week' : 'Month'}</button>`).join('')}</div></div><div class="history-plot"><div class="reference-line" style="--at:${(400 / max).toFixed(4)}" aria-hidden="true"><span>400 mg</span></div><div class="history-chart ${month ? 'month' : ''}" style="--step:${step}ms">${days.map((d, i) => `<button class="history-bar ${selectedDay === d.key ? 'selected' : ''}" style="--i:${i}" data-action="day" data-day="${d.key}" data-focus="day-${d.key}" aria-pressed="${selectedDay === d.key}" aria-label="${new Date(d.time).toLocaleDateString()}: ${d.mg} milligrams"><span class="bar-track"><span style="height:${d.mg ? Math.max(1.5, d.mg / max * 100) : 0}%" class="${d.mg > 400 ? 'over' : ''}"><span class="bar-value">${d.mg || ''}</span></span></span><span class="bar-label">${month ? new Date(d.time).getDate() : new Date(d.time).toLocaleDateString([], { weekday: 'short' })}</span></button>`).join('')}</div></div><p class="small-note">Tap a day to open its page. *Unlogged days count as zero. A log summary, not a health score.</p></section><section class="history-bottom"><div class="day-column"><div class="section-heading day-heading"><div><h2>${esc(pageTitle)}</h2><p class="day-summary">${pageDrinks.length} ${pageDrinks.length === 1 ? 'drink' : 'drinks'} · ${sumMg(page)} mg · ${pageWater} water</p></div><label class="date-picker"><span class="sr-only">Journal date</span><input type="date" id="history-date" value="${selectedDay}" max="${today}"></label></div><div class="day-page ${motion.startsWith('turn') ? motion : ''}">${entryList(page)}</div></div><section class="regulars ${motion === 'grow' ? 'grow' : ''}" aria-labelledby="regulars-title"><h2 id="regulars-title">Your regulars</h2>${favorites.length ? `<ol>${favorites.map(([name, n], i) => `<li style="--i:${i}"><span class="regular-name">${esc(name)}</span><span class="regular-count">${n}×</span><span class="regular-bar" aria-hidden="true"><span style="width:${n / favorites[0][1] * 100}%"></span></span></li>`).join('')}</ol>` : '<p class="muted">Your most-logged drinks will show up here.</p>'}</section></section>`;
+}
+// Animate history changes: bars grow on arrival and range switches, the day
+// page turns in the direction of time, and the summary figures roll.
+function turnTo(day) {
+  historyMotion = day < selectedDay ? 'turn-back' : day > selectedDay ? 'turn-forward' : '';
+  selectedDay = day;
+}
+function rollHistoryFigures(before) {
+  if (!before) return;
+  document.querySelectorAll('[data-figure]').forEach(el => rollTo(el, before[el.dataset.figure], historyFigures[el.dataset.figure]));
 }
 function sleepView() {
   const now = Date.now(), { bedtime: bedValue, halfLife } = state.settings;
@@ -145,11 +201,36 @@ function sleepView() {
     : atBed < 50 ? ['A gentler landing.', 'Little of today’s caffeine should remain by bedtime.']
     : ['Give your last cup some space.', 'Some caffeine may still be noticeable at bedtime. Caffeine-free from here is a good call.'];
   const entering = sleepEntrance; sleepEntrance = false;
-  return `<section class="night ${entering ? 'entering' : ''} ${atBed < 50 ? 'calm' : 'linger'}" aria-labelledby="night-verdict"><div class="night-moon" aria-hidden="true"></div><div class="night-head"><p class="night-when">Bedtime <strong>${fmtTime(bedtime)}</strong>${weekday(bedtime)} · in ${((bedtime - now) / HOUR).toFixed(1)} h</p><p class="night-figure"><span class="night-mg">${Math.round(atBed)}</span><span class="night-unit">mg</span></p><p class="night-label">estimated caffeine still active at bedtime</p><h2 id="night-verdict">${verdict}</h2><p class="night-detail">${detail}</p></div><figure class="night-chart"><div class="night-plot"><svg viewBox="0 0 100 100" preserveAspectRatio="none" role="img" aria-label="Estimated active caffeine from now until bedtime, from ${Math.round(current)} to ${Math.round(atBed)} milligrams"><defs><linearGradient id="night-glow" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f4b860" stop-opacity=".5"/><stop offset="1" stop-color="#f4b860" stop-opacity="0"/></linearGradient></defs><path class="night-area" d="${line} L100,100 L0,100 Z"/><line class="night-threshold" x1="0" x2="100" y1="${y(50)}" y2="${y(50)}"/><path class="night-line" d="${line}"/></svg><span class="night-threshold-label" style="top:${y(50)}%">50 mg</span><span class="night-pin now" style="left:0%;top:${y(current)}%"><span><b>${Math.round(current)} mg</b>now</span></span>${crossing === null ? '' : `<span class="night-pin cross${crossing > 70 || crossing < 22 ? ' below' : ''}" style="left:${crossing}%;top:${y(50)}%"><span><b>${fmtTime(below)}</b>under 50 mg</span></span>`}<span class="night-pin bed" style="left:100%;top:${y(atBed)}%"><span><b>${Math.round(atBed)} mg</b>bedtime</span></span></div><figcaption class="night-axis"><span>${fmtTime(now)}</span><span>${fmtTime(finish)}${weekday(finish)}</span></figcaption></figure></section><dl class="night-facts"><div><dt>Active right now</dt><dd>${Math.round(current)}<small> mg</small></dd></div><div><dt>Under 50 mg</dt><dd>${below <= now ? 'Already' : `${fmtTime(below)}<small>${weekday(below)}</small>`}</dd></div><div><dt>Half-life</dt><dd>${halfLife}<small> h</small></dd><dd class="night-note">100 mg becomes 50 mg after ${halfLife} h, 25 mg after ${halfLife * 2} h.</dd></div></dl><p class="health-note">Assumes no more caffeine. 50 mg is a visualization threshold, not a proven “sleep-safe” level. This is a simplified estimate, not medical advice or a guarantee of sleep quality. Metabolism varies with medications, pregnancy, genetics, and other factors. Talk to a clinician about personal limits or persistent sleep problems. Bedtime and half-life are in Sleep settings ${icon('settings')}.</p>`;
+  return `<section class="night ${entering ? 'entering' : ''} ${atBed < 50 ? 'calm' : 'linger'}" aria-labelledby="night-verdict"><div class="night-moon" aria-hidden="true"></div><div class="night-head"><p class="night-when">Bedtime <strong>${fmtTime(bedtime)}</strong>${weekday(bedtime)} · in ${((bedtime - now) / HOUR).toFixed(1)} h</p><p class="night-figure"><span class="night-mg">${Math.round(atBed)}</span><span class="night-unit">mg</span></p><p class="night-label">estimated caffeine still active at bedtime</p><h2 id="night-verdict">${verdict}</h2><p class="night-detail">${detail}</p></div><figure class="night-chart"><div class="night-plot"><svg viewBox="0 0 100 100" preserveAspectRatio="none" role="img" aria-label="Estimated active caffeine from now until bedtime, from ${Math.round(current)} to ${Math.round(atBed)} milligrams"><defs><linearGradient id="night-glow" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f4b860" stop-opacity=".5"/><stop offset="1" stop-color="#f4b860" stop-opacity="0"/></linearGradient></defs><path class="night-area" d="${line} L100,100 L0,100 Z"/><line class="night-threshold" x1="0" x2="100" y1="${y(50)}" y2="${y(50)}"/><path class="night-line" d="${line}"/></svg><span class="night-threshold-label" style="top:${y(50)}%">50 mg</span><span class="night-pin now" style="left:0%;top:${y(current)}%"><span><b>${Math.round(current)} mg</b>now</span></span>${crossing === null ? '' : `<span class="night-pin cross${crossing > 70 || crossing < 22 ? ' below' : ''}" style="left:${crossing}%;top:${y(50)}%"><span><b>${fmtTime(below)}</b>under 50 mg</span></span>`}<span class="night-pin bed" style="left:100%;top:${y(atBed)}%"><span><b>${Math.round(atBed)} mg</b>bedtime</span></span></div><figcaption class="night-axis"><span>${fmtTime(now)}</span><span>${fmtTime(finish)}${weekday(finish)}</span></figcaption></figure></section><dl class="facts night-facts"><div><dt>Active right now</dt><dd>${Math.round(current)}<small> mg</small></dd></div><div><dt>Under 50 mg</dt><dd>${below <= now ? 'Already' : `${fmtTime(below)}<small>${weekday(below)}</small>`}</dd></div><div><dt>Half-life</dt><dd>${halfLife}<small> h</small></dd><dd class="facts-note">100 mg becomes 50 mg after ${halfLife} h, 25 mg after ${halfLife * 2} h.</dd></div></dl><p class="health-note">Assumes no more caffeine. 50 mg is a visualization threshold, not a proven “sleep-safe” level. This is a simplified estimate, not medical advice or a guarantee of sleep quality. Metabolism varies with medications, pregnancy, genetics, and other factors. Talk to a clinician about personal limits or persistent sleep problems. Bedtime and half-life are in Settings ${icon('settings')}.</p>`;
+}
+const STRONG_MG = 150, HIGH_MG = 300;
+const layerInk = hex => { const n = parseInt(hex.slice(1), 16); return .299 * (n >> 16) + .587 * (n >> 8 & 255) + .114 * (n & 255) < 140 ? '#fff4de' : '#30261f'; };
+const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
+function strengthNote(mg) {
+  if (mg >= HIGH_MG) return `Very strong: ${mg} mg is close to the full 400 mg daily reference.`;
+  if (mg >= STRONG_MG) return `A strong one: ${mg} mg is ${mg >= 180 ? 'about half' : 'over a third'} of the 400 mg daily reference.`;
+  return '';
 }
 function labView() {
   const recipe = matchRecipe(layers), totals = blendTotals(layers), categories = ['All', ...new Set(INGREDIENTS.map(i => i.cat))];
-  return `<div class="lab-intro"><span class="badge">A tiny café. You’re the barista.</span><p>Tap or drag ingredients into your cup. Discover a classic, or make it your own.</p></div><section class="lab-layout"><article class="card pantry"><div class="section-heading"><h2>The pantry</h2><span class="muted">11 ingredients</span></div><div class="chips">${categories.map(cat => `<button class="chip ${ingredientCategory === cat ? 'selected' : ''}" data-action="ingredient-category" data-category="${cat}" data-focus="ingredient-cat-${cat}" aria-pressed="${ingredientCategory === cat}">${cat}</button>`).join('')}</div><div class="ingredient-grid">${INGREDIENTS.filter(i => ingredientCategory === 'All' || i.cat === ingredientCategory).map(i => `<button class="ingredient" draggable="true" data-ingredient="${i.id}" data-action="ingredient" data-id="${i.id}" data-focus="ingredient-${i.id}" ${layers.length >= MAX_LAYERS ? 'disabled' : ''}><span class="ingredient-swatch" style="--ingredient:${i.color}">${icon(i.cat === 'Base' || i.id === 'ice' ? 'water' : 'cup')}</span><strong>${i.name}</strong><span>${i.mg} mg · ${i.kcal} kcal</span></button>`).join('')}</div><p class="small-note">Each tap adds one recipe portion. Nutrition is estimated per ingredient, not by cup volume.</p></article><article class="card mixing-card"><div class="section-heading"><span class="eyebrow">YOUR LITTLE CREATION</span><button class="text-button" data-action="reset-blend" ${layers.length ? '' : 'disabled'}>Reset</button></div><div class="mixing-zone" id="mixing-zone" role="group" aria-label="Drop ingredients into your cup"><div class="blend-steam" aria-hidden="true">∿ ∿ ∿</div><div class="blend-cup"><div class="blend-layers">${layers.map((id, index) => `<button class="blend-layer" style="--ingredient:${ING_BY_ID[id].color}" data-action="remove-layer" data-index="${index}" aria-label="Remove layer ${index + 1}: ${ING_BY_ID[id].name}"><span>${ING_BY_ID[id].name}</span>${icon('close')}</button>`).join('')}${!layers.length ? '<span class="cup-placeholder">a little possibility<br>in an empty cup</span>' : ''}</div></div><div class="blend-saucer"></div></div><div class="layer-count" aria-live="polite">${layers.length} / ${MAX_LAYERS} layers ${layers.length ? '· tap a layer to remove' : '· start with an ingredient'}</div><h2>${recipe ? recipe.name : layers.length ? 'Your custom blend' : 'Something good is brewing.'}</h2><p class="blend-tagline">${recipe ? recipe.tagline : layers.length ? 'No rules. Just your very own recipe.' : 'Your next favorite is a few taps away.'}</p><div class="blend-totals"><span><strong>${totals.mg}</strong> mg caffeine</span><span><strong>${totals.kcal}</strong> kcal</span></div><button class="button primary log-blend" data-action="log-blend" ${layers.length ? '' : 'disabled'}>${icon('plus')}Log this blend</button><button class="text-button surprise" data-action="surprise" data-focus="surprise">${icon('shuffle')}Surprise me</button></article></section><section class="section recipe-section"><div class="section-heading"><div><p class="eyebrow">BORROW A LITTLE INSPIRATION</p><h2>The recipe book</h2></div><span class="muted">${RECIPES.length} ways to play</span></div><div class="recipe-grid">${RECIPES.map((r, index) => `<button class="recipe-card ${recipe === r ? 'selected' : ''}" data-action="recipe" data-index="${index}" data-focus="recipe-${index}" aria-pressed="${recipe === r}"><span class="recipe-number">${String(index + 1).padStart(2, '0')}</span><strong>${r.name}</strong><span>${r.ing.length} layers · ${blendTotals(r.ing).mg} mg</span>${icon('arrow')}</button>`).join('')}</div></section>`;
+  const full = layers.length >= MAX_LAYERS, strength = totals.mg >= HIGH_MG ? 'high' : totals.mg >= STRONG_MG ? 'strong' : '';
+  const name = recipe ? recipe.name : 'Your custom blend';
+  const count = !layers.length ? `0 of ${MAX_LAYERS} layers · start with any ingredient` : full ? 'Your cup is full. Tap a layer to make room.' : `${layers.length} of ${MAX_LAYERS} layers · tap a layer to remove it`;
+  const tagline = recipe ? recipe.tagline : layers.length ? (strength ? 'Your very own recipe.' : 'No rules. Just your very own recipe.') : 'Your next favorite is a few taps away.';
+  const dock = `<div class="blend-dock ${dockAway && layers.length ? 'away' : ''}" ${layers.length ? '' : 'hidden'}><button class="dock-peek" data-action="show-cup" aria-label="Show your cup: ${esc(name)}, ${totals.mg} milligrams"><span class="dock-cup" aria-hidden="true">${layers.map(id => `<i style="--ingredient:${ING_BY_ID[id].color}"></i>`).join('')}</span><span class="dock-text"><strong>${esc(name)}</strong><span>${plural(layers.length, 'layer')} · ${totals.mg} mg</span></span></button><button class="dock-log" data-action="log-blend" aria-label="Log ${esc(name)}">${icon('plus')}Log</button></div>`;
+  return `<div class="lab-intro"><span class="badge">A tiny café. You’re the barista.</span><p>Tap or drag ingredients into your cup, in any order. Match a classic, or make it your own.</p></div><section class="lab-layout"><article class="card pantry"><div class="section-heading"><h2>The pantry</h2><span class="muted">${INGREDIENTS.length} ingredients</span></div><div class="chips">${categories.map(cat => `<button class="chip ${ingredientCategory === cat ? 'selected' : ''}" data-action="ingredient-category" data-category="${cat}" data-focus="ingredient-cat-${cat}" aria-pressed="${ingredientCategory === cat}">${cat}</button>`).join('')}</div><div class="ingredient-grid">${INGREDIENTS.filter(i => ingredientCategory === 'All' || i.cat === ingredientCategory).map(i => `<button class="ingredient" ${full ? 'disabled' : 'draggable="true"'} data-ingredient="${i.id}" data-action="ingredient" data-id="${i.id}" data-focus="ingredient-${i.id}"><span class="ingredient-swatch" style="--ingredient:${i.color}">${icon(i.cat === 'Base' || i.id === 'ice' ? 'water' : 'cup')}</span><strong>${i.name}</strong><span class="ing-meta"><b>${i.mg} mg</b>${i.kcal} kcal</span></button>`).join('')}</div><p class="small-note">Each tap adds one recipe portion. Nutrition is estimated per ingredient, not by cup volume.</p></article><article class="card mixing-card"><div class="section-heading"><span class="eyebrow">YOUR LITTLE CREATION</span><button class="text-button" data-action="reset-blend" ${layers.length ? '' : 'disabled'}>Reset</button></div><div class="mixing-zone" id="mixing-zone" role="group" aria-label="Your cup"><div class="blend-steam" aria-hidden="true">∿ ∿ ∿</div><div class="blend-cup"><div class="blend-layers">${layers.map((id, index) => `<button class="blend-layer" style="--ingredient:${ING_BY_ID[id].color};--layer-ink:${layerInk(ING_BY_ID[id].color)}" data-action="remove-layer" data-index="${index}" aria-label="Remove layer ${index + 1}: ${ING_BY_ID[id].name}"><span>${ING_BY_ID[id].name}</span>${icon('close')}</button>`).join('')}${!layers.length ? '<span class="cup-placeholder">a little possibility<br>in an empty cup</span>' : ''}</div></div><div class="blend-saucer"></div></div><div class="layer-count ${full ? 'full' : ''}" aria-live="polite">${count}</div><h2>${recipe ? recipe.name : layers.length ? 'Your custom blend' : 'Something good is brewing.'}</h2><p class="blend-tagline">${tagline}</p>${strength ? `<p class="blend-note ${strength}">${strengthNote(totals.mg)}</p>` : ''}<div class="blend-totals ${strength}"><span class="mg"><strong>${totals.mg}</strong> mg caffeine</span><span class="kcal"><strong>${totals.kcal}</strong> kcal</span></div><button class="button primary log-blend" data-action="log-blend" ${layers.length ? '' : 'disabled'}>${icon('plus')}Log this blend</button><button class="text-button surprise" data-action="surprise" data-focus="surprise">${icon('shuffle')}Surprise me</button></article></section><section class="section recipe-section"><div class="section-heading"><div><p class="eyebrow">BORROW A LITTLE INSPIRATION</p><h2>The recipe book</h2></div><span class="muted">${RECIPES.length} ways to play</span></div><div class="recipe-grid">${RECIPES.map((r, index) => `<button class="recipe-card ${recipe === r ? 'selected' : ''}" data-action="recipe" data-index="${index}" data-focus="recipe-${index}" aria-pressed="${recipe === r}"><span class="recipe-number">${String(index + 1).padStart(2, '0')}</span><strong>${r.name}</strong><span>${plural(r.ing.length, 'layer')} · ${blendTotals(r.ing).mg} mg</span>${icon('arrow')}</button>`).join('')}</div></section>${dock}`;
+}
+let dockAway = false, dockObserver = null;
+function setDock(away) {
+  dockAway = away; const on = away && view === 'lab' && layers.length > 0;
+  $('.blend-dock')?.classList.toggle('away', on); document.documentElement.classList.toggle('lab-docked', on);
+}
+function watchBlendDock() {
+  dockObserver?.disconnect(); dockObserver = null;
+  const cup = $('.blend-cup');
+  if (view !== 'lab' || !cup || !('IntersectionObserver' in window)) { setDock(false); return; }
+  dockObserver = new IntersectionObserver(([e]) => setDock(!e.isIntersecting), { rootMargin: '0px 0px -150px 0px', threshold: .4 });
+  dockObserver.observe(cup);
 }
 function catalogMarkup() {
   const results = DRINKS.filter(d => (modalCategory === 'all' || d.cat === modalCategory) && `${d.name} ${d.cat}`.toLowerCase().includes(modalQuery.toLowerCase()));
@@ -160,10 +241,35 @@ function openCatalog() {
   picker.innerHTML = `<div class="dialog-heading"><div><p class="eyebrow">FIND YOUR NEXT SIP</p><h2 id="picker-title">What’s in your cup?</h2></div><button class="icon-button" data-action="close" aria-label="Close drink picker">${icon('close')}</button></div><label class="search-label"><span class="sr-only">Search drinks</span><input id="drink-search" type="search" placeholder="Search coffee, tea, energy drinks…" autocomplete="off"></label><div class="chips catalog-chips">${CATEGORIES.map(([id, name]) => `<button class="chip ${id === 'all' ? 'selected' : ''}" data-action="catalog-category" data-category="${id}" aria-pressed="${id === 'all'}">${name}</button>`).join('')}</div><div id="catalog-list">${catalogMarkup()}</div><p class="small-note">Estimates per serving. Actual caffeine varies by brand and preparation.</p>`;
   showDialog(); $('#drink-search').focus();
 }
+// Answers stay in memory only: pregnancy and medication are nobody's business
+// but the user's, and the estimate is only useful while choosing a value.
+const ESTIMATE_QUESTIONS = [
+  ['smoke', 'Do you smoke or use nicotine?', [['no', 'No'], ['yes', 'Yes']]],
+  ['hormonal', 'Do you use hormonal birth control?', [['no', 'No'], ['yes', 'Yes']], 'Pill, patch, ring or similar.'],
+  ['pregnancy', 'Are you pregnant?', [['no', 'No'], ['t1', '1st trimester'], ['t2', '2nd'], ['t3', '3rd']]],
+  ['meds', 'Do you take a medication that slows caffeine clearance?', [['no', 'No'], ['yes', 'Yes'], ['unsure', 'Not sure']], 'For example fluvoxamine or ciprofloxacin.'],
+];
+let estimateAnswers = {};
 function openSettings() {
   const { bedtime, halfLife } = state.settings;
-  picker.innerHTML = `<div class="dialog-heading"><h2 id="picker-title">Sleep settings</h2><button class="icon-button" data-action="close" aria-label="Close sleep settings">${icon('close')}</button></div><div class="settings-form"><label class="settings-row" for="bedtime"><span>Bedtime<small>Your forecast runs from now until this time.</small></span><input type="time" id="bedtime" value="${bedtime}" required></label><div class="settings-row"><label for="half-life">Caffeine half-life<small>Time to clear about half your caffeine. Usually 3–8 h.</small></label><output id="half-life-value" for="half-life">${halfLife} h</output></div><input id="half-life" type="range" min="3" max="8" step="0.5" value="${halfLife}"><div class="meter-labels"><span>3 h · faster</span><span>5 h · default</span><span>8 h · slower</span></div><p class="small-note">Changes estimates only, not your intake totals.</p></div>`;
+  estimateAnswers = {};
+  picker.innerHTML = `<div class="dialog-heading"><h2 id="picker-title">Settings</h2><button class="icon-button" data-action="close" aria-label="Close settings">${icon('close')}</button></div><div class="settings-form"><label class="settings-row" for="bedtime"><span>Bedtime<small>Your forecast runs from now until this time.</small></span><input type="time" id="bedtime" value="${bedtime}" required></label><fieldset class="settings-row effects-setting"><legend>Caffeine effects<small id="effects-note">${effectsNote(state.settings.pulse)}</small></legend><div class="chips">${EFFECT_MODES.map(([value, label]) => `<label class="chip choice"><input class="sr-only" type="radio" name="pulse-mode" value="${value}" ${state.settings.pulse === value ? 'checked' : ''}>${label}</label>`).join('')}</div></fieldset><div class="settings-row"><label for="half-life">Caffeine half-life<small>Time to clear about half your caffeine. Usually 3–8 h.</small></label><output id="half-life-value" for="half-life">${halfLife} h</output></div><input id="half-life" type="range" min="3" max="8" step="0.5" value="${halfLife}"><div class="meter-labels"><span>3 h · faster</span><span>5 h · default</span><span>8 h · slower</span></div><p class="small-note">Changes estimates only, not your intake totals.</p><details class="estimator"><summary>Not sure? Estimate your half-life</summary><form id="estimate-form" class="estimate-form">${ESTIMATE_QUESTIONS.map(([key, question, options, hint]) => `<fieldset><legend>${question}${hint ? `<small>${hint}</small>` : ''}</legend><div class="chips">${options.map(([value, label]) => `<label class="chip choice"><input class="sr-only" type="radio" name="hl-${key}" value="${value}">${label}</label>`).join('')}</div></fieldset>`).join('')}<div class="estimate-result"><div class="estimate-figure"><span>Suggested half-life</span><strong id="estimate-value" aria-live="polite"></strong></div><div class="estimate-ladder" aria-hidden="true"><span class="ladder-track"></span>${[1, 2, 3].map(n => `<span class="ladder-step" data-step="${n}"><b>${100 / 2 ** n} mg</b><i></i></span>`).join('')}</div><ul class="estimate-factors" id="estimate-factors"></ul><button type="button" class="button primary full-width" data-action="apply-half-life" id="estimate-apply"></button><p class="small-note">A rough starting point from average effects seen in studies. Your own half-life can be quite different. Not medical advice. Your answers aren’t saved.</p></div></form></details></div>`;
+  updateEstimate();
   showDialog();
+}
+function updateEstimate() {
+  const figure = $('#estimate-value'); if (!figure) return;
+  const { value, factors, capped } = estimateHalfLife(estimateAnswers);
+  figure.textContent = `${value} h`;
+  picker.querySelectorAll('.ladder-step').forEach(step => { step.style.left = `${Math.min(100, value * step.dataset.step / 24 * 100)}%`; step.querySelector('i').textContent = `${value * step.dataset.step} h`; });
+  const notes = [`<li>Starting point: ${HALF_LIFE_BASE} h, a typical adult average.</li>`, ...factors.map(f => `<li>${f.label}: ${f.effect}, about ×${f.multiplier}.</li>`)];
+  if (capped === 'high') notes.push('<li>Your answers point past 8 h, the longest this app models, so 8 h is used.</li>');
+  if (capped === 'low') notes.push('<li>Your answers point below 3 h, the shortest this app models, so 3 h is used.</li>');
+  if (estimateAnswers.meds && estimateAnswers.meds !== 'no') notes.push('<li>A pharmacist can tell you whether your medications affect caffeine.</li>');
+  $('#estimate-factors').innerHTML = notes.join('');
+  const apply = $('#estimate-apply'), current = state.settings.halfLife === value;
+  apply.dataset.value = value; apply.disabled = current;
+  apply.textContent = current ? `Your setting is already ${value} h` : `Use ${value} h`;
 }
 function showDialog() { if (!picker.open) picker.showModal(); }
 // Portions are discrete: whole cups (or cans for canned drinks), in halves.
@@ -201,7 +307,8 @@ function formTime() {
 function addIngredient(id) {
   if (!ING_BY_ID[id] || layers.length >= MAX_LAYERS) return;
   layers.push(id); tick(); render();
-  $('#mixing-zone')?.classList.add('splashed');
+  $('#mixing-zone')?.classList.add('splashed'); $('.dock-cup')?.classList.add('splashed');
+  if (layers.length >= MAX_LAYERS && (!document.activeElement || document.activeElement === document.body)) $('.log-blend')?.focus({ preventScroll: true });
 }
 function download(data, type, name) {
   const url = URL.createObjectURL(new Blob([data], { type }));
@@ -243,6 +350,13 @@ document.addEventListener('click', event => {
     case 'export-json': exportJournal(); if (picker.open) picker.close(); break;
     case 'export-pdf': exportReport(); picker.close(); break;
     case 'settings': openSettings(); break;
+    case 'account': openAccount(); break;
+    case 'sync-now': syncNow(true); break;
+    case 'sign-out': signOut(d.force === 'true'); break;
+    case 'apply-half-life': {
+      state.settings.halfLife = +d.value; commit(`Half-life set to ${d.value} h.`);
+      $('#half-life').value = d.value; $('#half-life-value').textContent = `${d.value} h`; updateEstimate(); break;
+    }
     case 'catalog': openCatalog(); break;
     case 'close': picker.close(); break;
     case 'choose': chooseDrink(DRINK_BY_ID[d.id]); break;
@@ -265,15 +379,16 @@ document.addEventListener('click', event => {
     }
     case 'undo': if (undo) { state.entries.push(undo); undo = null; commit('Sip restored.'); } break;
     case 'edit': editEntry(d.id); break;
-    case 'range': historyRange = +d.value; render(); break;
-    case 'day': selectedDay = d.day; render(); break;
+    case 'range': { if (+d.value === historyRange) break; const before = historyFigures; historyRange = +d.value; historyMotion = 'grow'; render(); rollHistoryFigures(before); break; }
+    case 'day': turnTo(d.day); render(); break;
     case 'ingredient-category': ingredientCategory = d.category; render(); break;
     case 'ingredient': addIngredient(d.id); break;
     case 'remove-layer': layers.splice(+d.index, 1); tick(); render(); $('#mixing-zone')?.closest('article')?.querySelector('[data-action="reset-blend"]')?.focus({ preventScroll: true }); break;
+    case 'show-cup': $('.mixing-card')?.scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'center' }); break;
     case 'reset-blend': layers = []; render(); break;
     case 'recipe': layers = [...RECIPES[+d.index].ing]; tick(); render(); notify(`${RECIPES[+d.index].name} loaded into your cup.`); break;
     case 'surprise': {
-      const options = RECIPES.filter(r => blendKey(r.ing) !== blendKey(layers));
+      const options = RECIPES.filter(r => blendKey(r.ing) !== blendKey(layers) && blendTotals(r.ing).mg < STRONG_MG);
       const recipe = options[Math.floor(Math.random() * options.length)]; layers = [...recipe.ing]; tick(); render(); notify(`Meet your ${recipe.name}.`); break;
     }
     case 'log-blend': {
@@ -289,7 +404,7 @@ document.addEventListener('input', event => {
 });
 document.addEventListener('change', event => {
   const { id, value } = event.target;
-  if (id === 'history-date' && /^\d{4}-\d{2}-\d{2}$/.test(value) && value <= dayKey()) { selectedDay = value; render(); $('#history-date')?.focus({ preventScroll: true }); }
+  if (id === 'history-date' && /^\d{4}-\d{2}-\d{2}$/.test(value) && value <= dayKey()) { turnTo(value); render(); $('#history-date')?.focus({ preventScroll: true }); }
   if (id === 'bedtime' && validTime(value)) { state.settings.bedtime = value; commit(); }
   if (id === 'backup-file' && event.target.files[0]) reportFromFile(event.target.files[0]);
   if (id === 'half-life') { state.settings.halfLife = Math.max(3, Math.min(8, +value)); commit(); }
@@ -299,13 +414,17 @@ document.addEventListener('keydown', event => {
   if (event.key === 'Escape' && picker.open) { event.preventDefault(); picker.close(); }
 }, true);
 picker.addEventListener('submit', event => {
-  event.preventDefault(); const time = formTime(); if (time === null) return;
+  event.preventDefault(); if (event.target.id === 'estimate-form') return; const time = formTime(); if (time === null) return;
   if (event.target.id === 'log-form') {
     const cupArt = picker.querySelector('.amount-hero .cup-art');
-    const flight = view === 'today' && cupArt ? { from: cupArt.getBoundingClientRect(), svg: cupArt.outerHTML, cat: modalDrink.cat, before: todayFigures() } : null;
+    const fromLab = view === 'lab';
+    const flight = (view === 'today' || fromLab) && cupArt ? { from: cupArt.getBoundingClientRect(), svg: cupArt.outerHTML, cat: modalDrink.cat, before: todayFigures() } : null;
     state.entries.push(makeDrink(modalDrink, modalAmount, time));
-    picker.close(); commit(`${modalDrink.name} logged. ${Math.round(modalDrink.mg * modalAmount)} mg · ${modalAmount} ${portionName(modalDrink.cat)}${modalAmount === 1 ? '' : 's'}, noted.`);
-    if (flight) pourDrink({ ...flight, after: todayFigures(), sound: glug });
+    picker.close();
+    // A finished blend lands on Today, so the pour shows where it counts. Back returns to the Lab.
+    if (fromLab) { history.pushState(null, '', '#today'); view = 'today'; window.scrollTo({ top: 0 }); }
+    commit(`${modalDrink.name} logged. ${Math.round(modalDrink.mg * modalAmount)} mg · ${modalAmount} ${portionName(modalDrink.cat)}${modalAmount === 1 ? '' : 's'}, noted.`);
+    if (flight) pourDrink({ ...flight, after: todayFigures(), sound: glug, pulse: heartbeat });
   } else if (event.target.id === 'edit-form') {
     const entry = state.entries.find(e => e.id === event.target.dataset.id);
     if (entry) entry.time = time;
@@ -323,11 +442,13 @@ document.addEventListener('drop', event => { if (event.target.closest('#mixing-z
 function route(focus = false) {
   const hash = location.hash.slice(1); view = ['today', 'history', 'sleep', 'lab'].includes(hash) ? hash : 'today';
   sleepEntrance = view === 'sleep';
+  if (view === 'history') historyMotion = 'grow';
   render(); if (focus) { $('#main').focus({ preventScroll: true }); window.scrollTo({ top: 0 }); }
 }
 window.addEventListener('hashchange', () => route(true));
 // Keep multiple open tabs in sync without clobbering a newer journal.
 window.addEventListener('storage', event => {
+  if (event.key === SYNC_KEY) { syncMeta = loadSyncMeta(storage); if (!syncMeta && authUser) { authUser = null; syncStatus = 'local'; } updateAccountUI(); }
   if (event.key === STORE_KEY) {
     const fresh = loadState(storage);
     if (!fresh.warning) { state.entries = fresh.state.entries; state.settings = fresh.state.settings; loaded.blocked = false; warning = ''; undo = null; render(); notify('Journal updated from another tab.'); }
@@ -346,7 +467,8 @@ setInterval(() => {
 }, 60000);
 window.addEventListener('pageshow', () => { if (!picker.open) render(); });
 route();
-if (!warning) persist();
+if (!warning) saveLocal();
+initAuth();
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('./sw.js').catch(() => notify('Offline setup unavailable. The journal still works online.'));
 }

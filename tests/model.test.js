@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { DRINKS, DRINK_BY_ID, INGREDIENTS, RECIPES, matchRecipe, blendTotals } from '../data.js';
-import { STORE_KEY, HOUR, dayKey, validTime, nextBedtime, activeAt, timeBelow, onDay, historyDays, waterBonuses, normalizeState, loadState, makeDrink } from '../model.js';
+import { STORE_KEY, HOUR, dayKey, validTime, nextBedtime, activeAt, timeBelow, onDay, historyDays, waterBonuses, normalizeState, loadState, makeDrink, estimateHalfLife, SYNC_KEY, loadSyncMeta, mergeJournals, planSync } from '../model.js';
 const at = new Date(2026, 8, 15, 12).getTime();
 const coffee = (mg = 100, time = at, id = 'coffee') => ({ id, kind: 'drink', drink: 'drip', name: 'Drip coffee', mg, kcal: 5, amount: 1, time });
 const water = (time, id) => ({ id, kind: 'water', time, mg: 0, kcal: 0 });
