@@ -27,6 +27,13 @@ try {
     const page = await context.newPage(), errors = [], external = [];
     page.on('pageerror', error => errors.push(error.message));
     page.on('request', request => { if (!request.url().startsWith(origin) && !request.url().startsWith('data:')) external.push(request.url()); });
+    await page.addInitScript(() => {
+      const originalFetch = window.fetch.bind(window);
+      window.fetch = (input, options) => {
+        if (String(input).startsWith('https://world.openfoodfacts.org/api/v2/product/')) return Promise.resolve(new Response(JSON.stringify({ status: 1, product: { product_name: 'Iced coffee', brands: 'Test brand', quantity: '250 ml', categories_tags: ['en:coffee'], nutriments: { caffeine_100ml: 32, 'energy-kcal_100ml': 48 } } }), { headers: { 'Content-Type': 'application/json' } }));
+        return originalFetch(input, options);
+      };
+    });
     await page.goto(origin);
     await page.getByRole('heading', { name: 'Your daily brew.' }).waitFor();
     await page.evaluate(() => navigator.serviceWorker.ready);
@@ -144,14 +151,32 @@ try {
     } else {
       console.log('MANUAL CHECK: Safari offline reload (Playwright WebKit internal navigation error)');
     }
+    await route(page, 'today');
+    await page.getByRole('button', { name: 'All drinks', exact: true }).click();
+    await page.getByRole('button', { name: 'Scan a barcode' }).click();
+    await page.getByLabel('Barcode number').fill('1234567890123');
+    await page.getByRole('button', { name: 'Look up' }).click();
+    await page.getByLabel('Caffeine per package (mg)').waitFor();
+    assert.equal(await page.locator('#custom-mg').inputValue(), '80');
+    assert.equal(await page.locator('#custom-kcal').inputValue(), '120');
+    assert.notEqual(await page.locator('#log-time').inputValue(), '');
+    await accessibility(page, `${engineName} barcode product`);
+    await page.locator('#log-time').fill('10:00');
+    await page.getByRole('button', { name: 'Add to my journal' }).click();
+    const scanned = (await journal(page)).entries.at(-1);
+    assert.equal(scanned.name, 'Test brand Iced coffee');
+    assert.equal(scanned.mg, 80);
+    assert.equal(scanned.kcal, 120);
+    assert.equal(scanned.unit, 'bottle');
+    assert.equal(new Date(scanned.time).getHours(), 10);
     for (const width of [320, 375, 480, 600, 768, 1024, 1440]) {
       await page.setViewportSize({ width, height: 900 });
       for (const name of ['today', 'history', 'sleep', 'lab']) { await route(page, name); await noOverflow(page, `${engineName} ${width}px ${name}`); }
     }
     assert.deepEqual(errors, [], `${engineName}: browser errors`);
-    assert.deepEqual(external, [], `${engineName}: external runtime requests`);
+    assert.deepEqual(external, [], `${engineName}: unexpected external runtime requests`);
     await context.close();
-    console.log(`PASS ${engineName}: logging, editing, undo, search, history, sleep, blends, dark mode, ${engineName === 'chromium' ? 'offline' : 'offline not automated'}, accessibility, 7 viewport widths`);
+    console.log(`PASS ${engineName}: logging, editing, undo, barcode lookup, history, sleep, blends, dark mode, ${engineName === 'chromium' ? 'offline' : 'offline not automated'}, accessibility, 7 viewport widths`);
     await browser.close(); browser = null;
   }
   browser = await chromium.launch();

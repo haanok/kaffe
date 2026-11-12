@@ -46,6 +46,8 @@ test('scaled drinks and blends retain exact ingredient nutrition', () => {
   const entry = makeDrink({ id: 'latte', name: 'Latte', ...totals }, 1.5, at);
   assert.equal(entry.mg, 96); assert.equal(entry.kcal, 245);
   assert.equal(makeDrink(DRINK_BY_ID.drip, .25, at).mg, 24);
+  const bottle = makeDrink({ name: 'Iced coffee', cat: 'coffee', unit: 'bottle', mg: 80, kcal: 120 }, 1, at);
+  assert.equal(normalizeState({ version: 2, entries: [bottle], settings: {} }).entries[0].unit, 'bottle');
 });
 test('water bonus follows chronology and is recalculated after edits/deletions', () => {
   const entries = [water(at + 2, 'w2'), coffee(), water(at + 1, 'w1'), coffee(0, at + 3, 'decaf'), water(at + 4, 'w3')];

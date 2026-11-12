@@ -32,6 +32,7 @@ A caffeine tracker that takes health seriously without becoming clinical. Sleep 
 ## Capabilities and Constraints
 
 - **Local-first, no account (binding).** Journal data lives only in the browser on that origin. There is no backend, sign-in, or sync. Export to JSON exists; import does not exist yet.
+- Barcode lookup is opt-in and sends the scanned code to Open Food Facts. The journal entry stays in browser storage; if the product record has no caffeine value, the user enters it from the package label. Camera scanning depends on browser support, with manual barcode entry as a fallback.
 - Current implementation: plain HTML, CSS, and ES modules with no runtime dependencies or build step, deployed to Azure Static Web Apps via `npm run package:site`. The user has not made no-build, English-only, or phone-first binding. They describe the current state and future work may revisit them.
 - Caffeine and kcal values in `data.js` are catalog estimates per serving. The half-life is user-adjustable and defaults to 5 h. The 400 mg/day figure is a general reference for healthy adults, not a limit. The sleep threshold is not a proven "sleep-safe" level.
 - Terminology in use: "journal", "sip", "Blend Lab", "reference" (not "limit"), "wind-down".
