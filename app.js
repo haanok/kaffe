@@ -242,14 +242,15 @@ function openCatalog() {
   picker.innerHTML = `<div class="dialog-heading"><div><p class="eyebrow">FIND YOUR NEXT SIP</p><h2 id="picker-title">What’s in your cup?</h2></div><button class="icon-button" data-action="close" aria-label="Close drink picker">${icon('close')}</button></div><button class="button barcode-open" data-action="barcode">${icon('scan')}<span>Scan a barcode</span></button><label class="search-label"><span class="sr-only">Search drinks</span><input id="drink-search" type="search" placeholder="Search coffee, tea, energy drinks…" autocomplete="off"></label><div class="chips catalog-chips">${CATEGORIES.map(([id, name]) => `<button class="chip ${id === 'all' ? 'selected' : ''}" data-action="catalog-category" data-category="${id}" aria-pressed="${id === 'all'}">${name}</button>`).join('')}</div><div id="catalog-list">${catalogMarkup()}</div><p class="small-note">Estimates per serving. Actual caffeine varies by brand and preparation.</p>`;
   showDialog(); $('#drink-search').focus();
 }
-let barcodeStream = null, barcodeFrame = 0, barcodeLookup = false;
+let barcodeControls = null, barcodeLookup = false;
 function stopBarcodeCamera() {
-  cancelAnimationFrame(barcodeFrame); barcodeFrame = 0;
-  barcodeStream?.getTracks().forEach(track => track.stop()); barcodeStream = null;
+  barcodeControls?.stop(); barcodeControls = null;
+  const video = $('#barcode-video');
+  if (video?.srcObject) { video.srcObject.getTracks().forEach(track => track.stop()); video.srcObject = null; }
 }
 function openBarcode() {
   stopBarcodeCamera(); barcodeLookup = false;
-  const canScan = 'BarcodeDetector' in window && navigator.mediaDevices?.getUserMedia;
+  const canScan = window.ZXingBrowser?.BrowserMultiFormatReader && navigator.mediaDevices?.getUserMedia;
   picker.innerHTML = `<div class="dialog-heading"><div><p class="eyebrow">QUICK PRODUCT LOOKUP</p><h2 id="picker-title">Scan a barcode</h2></div><button class="icon-button" data-action="close" aria-label="Close barcode scanner">${icon('close')}</button></div>${canScan ? `<button class="button primary full-width" data-action="start-scan">${icon('scan')}<span>Open camera</span></button><video class="barcode-video" id="barcode-video" muted playsinline hidden></video>` : '<p class="small-note scanner-note">Camera scanning is not available in this browser. Enter the barcode number instead.</p>'}<form id="barcode-form" class="barcode-form"><label for="barcode-input">Barcode number</label><div class="barcode-entry"><input id="barcode-input" type="text" inputmode="numeric" autocomplete="off" pattern="[0-9]{8,14}" minlength="8" maxlength="14" placeholder="EAN or UPC" required><button class="button" type="submit">Look up</button></div></form><p class="barcode-status" id="barcode-status" role="status" aria-live="polite">The barcode is sent to Open Food Facts for product details.</p><button class="text-button back-catalog" data-action="catalog">Back to drinks</button>`;
   showDialog(); $('#barcode-input').focus();
 }
@@ -293,20 +294,19 @@ async function lookupBarcode(code, scannedAt = Date.now()) {
 async function startBarcodeCamera() {
   const status = $('#barcode-status');
   try {
-    barcodeStream = await navigator.mediaDevices.getUserMedia({ audio: false, video: { facingMode: { ideal: 'environment' } } });
     const video = $('#barcode-video');
-    video.srcObject = barcodeStream; video.hidden = false; await video.play();
-    const detector = new BarcodeDetector({ formats: ['ean_13', 'ean_8', 'upc_a', 'upc_e'] });
-    if (status) status.textContent = 'Hold the barcode in view.';
-    const scan = async () => {
-      if (!barcodeStream || !video.isConnected) return;
-      try {
-        const [match] = await detector.detect(video);
-        if (match?.rawValue) { void lookupBarcode(match.rawValue, Date.now()); return; }
-      } catch {}
-      barcodeFrame = requestAnimationFrame(scan);
-    };
-    barcodeFrame = requestAnimationFrame(scan);
+    video.hidden = false;
+    if (status) status.textContent = 'Opening the camera…';
+    const reader = new ZXingBrowser.BrowserMultiFormatReader();
+    let scanned = false;
+    const controls = await reader.decodeFromConstraints({ audio: false, video: { facingMode: { ideal: 'environment' } } }, video, result => {
+      if (!result || scanned) return;
+      scanned = true;
+      void lookupBarcode(result.getText(), Date.now());
+    });
+    barcodeControls = controls;
+    if (scanned) stopBarcodeCamera();
+    else if (status) status.textContent = 'Hold the barcode in view.';
   } catch {
     stopBarcodeCamera();
     if (status) status.textContent = 'Camera unavailable. Check camera permission or enter the barcode number below.';

@@ -36,6 +36,7 @@ try {
     });
     await page.goto(origin);
     await page.getByRole('heading', { name: 'Your daily brew.' }).waitFor();
+    assert.equal(await page.evaluate(() => typeof window.ZXingBrowser?.BrowserMultiFormatReader), 'function', `${engineName}: local ZXing bundle loaded`);
     await page.evaluate(() => navigator.serviceWorker.ready);
     await noOverflow(page, `${engineName} today`);
     await accessibility(page, `${engineName} today light`);
@@ -169,6 +170,20 @@ try {
     assert.equal(scanned.kcal, 120);
     assert.equal(scanned.unit, 'bottle');
     assert.equal(new Date(scanned.time).getHours(), 10);
+    await page.getByRole('button', { name: 'All drinks', exact: true }).click();
+    await page.getByRole('button', { name: 'Scan a barcode' }).click();
+    await page.evaluate(() => {
+      window.ZXingBrowser.BrowserMultiFormatReader = class {
+        async decodeFromConstraints(constraints, video, callback) {
+          const controls = { stop() {} };
+          setTimeout(() => callback({ getText: () => '1234567890123' }, null, controls), 25);
+          return controls;
+        }
+      };
+    });
+    await page.getByRole('button', { name: 'Open camera' }).click();
+    await page.getByLabel('Caffeine per package (mg)').waitFor();
+    await page.keyboard.press('Escape');
     for (const width of [320, 375, 480, 600, 768, 1024, 1440]) {
       await page.setViewportSize({ width, height: 900 });
       for (const name of ['today', 'history', 'sleep', 'lab']) { await route(page, name); await noOverflow(page, `${engineName} ${width}px ${name}`); }
