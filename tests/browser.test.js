@@ -31,10 +31,22 @@ try {
       const originalFetch = window.fetch.bind(window);
       window.fetch = (input, options) => {
         if (String(input).startsWith('https://world.openfoodfacts.org/api/v2/product/')) {
-          const monster = String(input).includes('9876543210987');
-          const product = monster
-            ? { product_name: 'Energy Drink', brands: 'Monster', quantity: '500 ml', categories_tags: ['en:energy-drinks'], nutriments: { 'energy-kcal_100ml': 46 } }
-            : { product_name: 'Iced coffee', brands: 'Test brand', quantity: '250 ml', categories_tags: ['en:coffee'], nutriments: { caffeine_100ml: 32, 'energy-kcal_100ml': 48 } };
+          const code = new URL(String(input)).pathname.split('/').at(-1).split('.')[0];
+          const products = {
+            '9876543210987': { product_name: 'Energy Drink', brands: 'Monster', quantity: '500 ml', categories_tags: ['en:energy-drinks'], nutriments: { 'energy-kcal_100ml': 46 } },
+            '9876543210988': { product_name: 'Ultra Zero', brands: 'Monster', quantity: '500 ml', categories_tags: ['en:energy-drinks'], nutriments: {} },
+            '9876543210989': { product_name: 'Energy Drink', brands: 'Red Bull', quantity: '250 ml', categories_tags: ['en:energy-drinks'], nutriments: {} },
+            '9876543210990': { product_name: 'Sugarfree', brands: 'Red Bull', quantity: '250 ml', categories_tags: ['en:energy-drinks'], nutriments: {} },
+            '9876543210991': { product_name: 'Sparkling Orange', brands: 'Celsius', quantity: '350 ml', categories_tags: ['en:energy-drinks'], nutriments: {} },
+            '9876543210992': { product_name: 'Energy', brands: 'Bang', quantity: '470 ml', categories_tags: ['en:energy-drinks'], nutriments: {} },
+            '9876543210993': { product_name: 'Original Taste', brands: 'Coca-Cola', quantity: '330 ml', categories_tags: ['en:soft-drinks'], nutriments: {} },
+            '9876543210994': { product_name: 'Diet Coke', brands: 'Coca-Cola', quantity: '330 ml', categories_tags: ['en:soft-drinks'], nutriments: {} },
+            '9876543210995': { product_name: 'Cola', brands: 'Pepsi', quantity: '330 ml', categories_tags: ['en:soft-drinks'], nutriments: {} },
+            '9876543210996': { product_name: 'Original', brands: 'Mountain Dew', quantity: '330 ml', categories_tags: ['en:soft-drinks'], nutriments: {} },
+            '9876543210997': { product_name: 'Rehab', brands: 'Monster', quantity: '500 ml', categories_tags: ['en:energy-drinks'], nutriments: {} },
+            '9876543210998': { product_name: 'Diet Pepsi', brands: 'Pepsi', quantity: '330 ml', categories_tags: ['en:soft-drinks'], nutriments: {} },
+          };
+          const product = products[code] || { product_name: 'Iced coffee', brands: 'Test brand', quantity: '250 ml', categories_tags: ['en:coffee'], nutriments: { caffeine_100ml: 32, 'energy-kcal_100ml': 48 } };
           return Promise.resolve(new Response(JSON.stringify({ status: 1, product }), { headers: { 'Content-Type': 'application/json' } }));
         }
         return originalFetch(input, options);
@@ -176,14 +188,32 @@ try {
     assert.equal(scanned.kcal, 120);
     assert.equal(scanned.unit, 'bottle');
     assert.equal(new Date(scanned.time).getHours(), 10);
-    await page.getByRole('button', { name: 'All drinks', exact: true }).click();
-    await page.getByRole('button', { name: 'Scan a barcode' }).click();
-    await page.getByLabel('Barcode number').fill('9876543210987');
-    await page.getByRole('button', { name: 'Look up' }).click();
-    await page.getByLabel('Caffeine per package (mg)').waitFor();
-    assert.equal(await page.locator('#custom-mg').inputValue(), '160');
-    assert.match(await page.locator('.barcode-nutrition .small-note').innerText(), /Catalog estimate based on Monster Original/);
-    await page.keyboard.press('Escape');
+    const catalogFallbacks = [
+      ['9876543210987', '160', 'Monster Original'], ['9876543210988', '150', 'Monster Zero Ultra'],
+      ['9876543210989', '80', 'Red Bull'], ['9876543210990', '80', 'Red Bull Sugar-free'],
+      ['9876543210991', '200', 'Celsius'], ['9876543210992', '300', 'Bang Energy'],
+      ['9876543210993', '34', 'Coca-Cola'], ['9876543210994', '46', 'Diet Coke'],
+      ['9876543210995', '38', 'Pepsi'], ['9876543210996', '54', 'Mountain Dew'],
+    ];
+    for (const [code, mg, label] of catalogFallbacks) {
+      await page.getByRole('button', { name: 'All drinks', exact: true }).click();
+      await page.getByRole('button', { name: 'Scan a barcode' }).click();
+      await page.getByLabel('Barcode number').fill(code);
+      await page.getByRole('button', { name: 'Look up' }).click();
+      await page.getByLabel('Caffeine per package (mg)').waitFor();
+      assert.equal(await page.locator('#custom-mg').inputValue(), mg, `${label} catalog fallback`);
+      assert.match(await page.locator('.barcode-nutrition .small-note').innerText(), new RegExp(`Catalog estimate based on ${label}`));
+      await page.keyboard.press('Escape');
+    }
+    for (const code of ['9876543210997', '9876543210998']) {
+      await page.getByRole('button', { name: 'All drinks', exact: true }).click();
+      await page.getByRole('button', { name: 'Scan a barcode' }).click();
+      await page.getByLabel('Barcode number').fill(code);
+      await page.getByRole('button', { name: 'Look up' }).click();
+      await page.getByLabel('Caffeine per package (mg)').waitFor();
+      assert.equal(await page.locator('#custom-mg').inputValue(), '');
+      await page.keyboard.press('Escape');
+    }
     await page.getByRole('button', { name: 'All drinks', exact: true }).click();
     await page.getByRole('button', { name: 'Scan a barcode' }).click();
     await page.evaluate(() => {

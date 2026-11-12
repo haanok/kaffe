@@ -268,10 +268,29 @@ function barcodeCategory(product) {
 }
 function barcodeCatalogEstimate(product, ml) {
   const description = `${product.product_name || ''} ${product.brands || ''}`.toLowerCase();
-  if (!/\bmonster\b/.test(description)) return null;
-  const variant = /\b(?:ultra|zero|white)\b/.test(description) ? 'monster-zero' : /\b(?:rehab|java|juice|nitro|reserve|assault|rehydration|hydro|punch)\b/.test(description) ? null : 'monster';
+  const matches = [
+    ['monster-zero', /\bmonster\b.*\b(?:ultra|zero|white)\b|\b(?:ultra|zero|white)\b.*\bmonster\b/],
+    ['monster', /\bmonster\b/],
+    ['rb-sugarfree', /\bred\s*bull\b.*\b(?:sugar[ -]?free|zero)\b|\b(?:sugar[ -]?free|zero)\b.*\bred\s*bull\b/],
+    ['red-bull', /\bred\s*bull\b/],
+    ['celsius', /\bcelsius\b/],
+    ['bang', /\bbang\b/],
+    ['diet-coke', /\bdiet\s+coke\b|\bcoca[- ]cola\b.*\b(?:diet|light)\b/],
+    ['coke', /\b(?:coca[- ]cola|coke)\b/],
+    ['pepsi', /\bpepsi\b/],
+    ['mtn-dew', /\b(?:mountain|mtn)\s+dew\b/],
+  ];
+  const unsupportedVariants = {
+    monster: /\b(?:rehab|java|juice|nitro|reserve|assault|rehydration|hydro|punch)\b/,
+    bang: /\bshot\b/,
+    celsius: /\bessentials\b/,
+    coke: /\b(?:diet|zero|light|caffeine[ -]?free)\b/,
+    pepsi: /\b(?:diet|zero|max|light)\b/,
+    'mtn-dew': /\b(?:diet|zero|code\s+red|kickstart)\b/,
+  };
+  const variant = matches.find(([id, pattern]) => pattern.test(description) && !unsupportedVariants[id]?.test(description))?.[0];
   if (!variant) return null;
-  const drink = DRINK_BY_ID[variant], catalogMl = barcodeMl(drink.serving), packageMl = ml || catalogMl;
+  const drink = DRINK_BY_ID[variant], catalogMl = barcodeMl(drink.serving) || 1, packageMl = ml || catalogMl;
   return {
     mg: Math.round(drink.mg * packageMl / catalogMl),
     kcal: Math.round(drink.kcal * packageMl / catalogMl),
