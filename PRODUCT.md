@@ -32,7 +32,7 @@ A caffeine tracker that takes health seriously without becoming clinical. Sleep 
 ## Capabilities and Constraints
 
 - **Local-first, no account (binding).** Journal data lives only in the browser on that origin. There is no backend, sign-in, or sync. Export to JSON exists; import does not exist yet.
-- Barcode lookup is opt-in and sends the scanned code to Open Food Facts. The journal entry stays in browser storage. When product data omits caffeine, recognized Monster Original/Ultra, Red Bull Original/Sugar-free, Celsius, Bang, Coca-Cola, Diet Coke, Pepsi, and original Mountain Dew products use labeled local catalog estimates; other unmatched variants require the user to enter the package value. Camera scanning uses a locally bundled decoder, with manual barcode entry as a fallback.
+- Barcode lookup is opt-in and sends the scanned code to Open Food Facts. The journal entry stays in browser storage. When product data omits caffeine, recognized catalog variants use labeled local estimates, including Battery Original, Lemon Yuzu, Ruby, Sugar Free, Lemon Lime, Focus, Immunity and Mango Lime, plus NOCCO BCAA. Existing Monster, Red Bull, Celsius, Bang and cola estimates remain. Unmatched variants require the user to enter the package value. Camera scanning uses a locally bundled decoder, with manual barcode entry as a fallback.
 - Current implementation: plain HTML, CSS, and ES modules with no runtime dependencies or build step, deployed to Azure Static Web Apps via `npm run package:site`. The user has not made no-build, English-only, or phone-first binding. They describe the current state and future work may revisit them.
 - Caffeine and kcal values in `data.js` are catalog estimates per serving. The half-life is user-adjustable and defaults to 5 h. The 400 mg/day figure is a general reference for healthy adults, not a limit. The sleep threshold is not a proven "sleep-safe" level.
 - Terminology in use: "journal", "sip", "Blend Lab", "reference" (not "limit"), "wind-down".
@@ -46,7 +46,7 @@ A caffeine tracker that takes health seriously without becoming clinical. Sleep 
 
 ## Evidence on Hand
 
-- Drink catalog (30 items, including named brands such as Red Bull, Monster, and Coca-Cola, used as estimates), 11 Blend Lab ingredients, and 27 recipes in `data.js`.
+- Drink catalog (39 items, including named brands such as Battery, NOCCO, Red Bull and Monster, used as estimates), 11 Blend Lab ingredients, and 27 recipes in `data.js`.
 - Model tests and Playwright browser and accessibility tests in `tests/`, plus the tester checklist in `TESTING.md`.
 - No testimonials, user counts, studies, or press exist. Do not fabricate them, and do not cite medical claims beyond the hedged references already in the app.
 

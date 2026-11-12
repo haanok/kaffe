@@ -8,7 +8,7 @@ const water = (time, id) => ({ id, kind: 'water', time, mg: 0, kcal: 0 });
 const storage = values => ({ getItem(key) { return values[key] ?? null; } });
 
 test('full catalog and all recipes are valid and uniquely recognizable', () => {
-  assert.equal(DRINKS.length, 30); assert.equal(INGREDIENTS.length, 11); assert.equal(RECIPES.length, 27);
+  assert.equal(DRINKS.length, 39); assert.equal(INGREDIENTS.length, 11); assert.equal(RECIPES.length, 27);
   for (const r of RECIPES) { assert.ok(r.ing.length <= 6); assert.equal(matchRecipe([...r.ing].reverse()), r); assert.ok(blendTotals(r.ing).mg >= 0); }
 });
 test('decay halves, ignores future entries and water, and carries across midnight', () => {

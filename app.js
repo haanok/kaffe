@@ -240,7 +240,7 @@ function watchBlendDock() {
   dockObserver.observe(cup);
 }
 function catalogMarkup() {
-  const results = DRINKS.filter(d => (modalCategory === 'all' || d.cat === modalCategory) && `${d.name} ${d.cat}`.toLowerCase().includes(modalQuery.toLowerCase()));
+  const results = DRINKS.filter(d => (modalCategory === 'all' || d.cat === modalCategory) && `${d.name} ${d.cat} ${d.barcodeAliases.join(' ')}`.toLowerCase().includes(modalQuery.toLowerCase()));
   return `<div class="catalog-results">${results.length ? results.map(d => `<button class="catalog-drink" data-action="choose" data-id="${d.id}"><span class="entry-icon ${d.cat}">${icon(d.cat === 'energy' ? 'energy' : 'cup')}</span><span><strong>${d.name}</strong><small>${d.serving} · ${d.kcal} kcal</small></span><b>${d.mg}<small> mg</small></b>${icon('plus')}</button>`).join('') : '<p class="empty-search">No matching drinks. Try another name or category.</p>'}</div>`;
 }
 function openCatalog() {
@@ -275,6 +275,20 @@ function barcodeCategory(product) {
 }
 function barcodeCatalogEstimate(product, ml) {
   const description = `${product.product_name || ''} ${product.brands || ''}`.toLowerCase();
+  const normalize = value => value.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+  const normalized = normalize(description);
+  const productWords = new Set(normalized.split(' '));
+  const catalogDrink = DRINKS.flatMap(drink => drink.cat === 'energy' ? drink.barcodeAliases.map(alias => ({ drink, alias: normalize(alias) })) : [])
+    .filter(match => match.alias.split(' ').every(word => productWords.has(word)))
+    .sort((a, b) => b.alias.length - a.alias.length)[0]?.drink;
+  if (catalogDrink) {
+    const catalogMl = barcodeMl(catalogDrink.serving) || 1, packageMl = ml || catalogMl;
+    const mg = catalogDrink.mgPer100ml
+      ? Math.round(catalogDrink.mgPer100ml * packageMl / 100)
+      : Math.round(catalogDrink.mg * packageMl / catalogMl);
+    const kcal = Math.round(catalogDrink.kcal * packageMl / catalogMl);
+    return { mg, kcal, note: `Catalog estimate based on ${catalogDrink.name}: ${mg} mg for ${packageMl} ml. Check the package label.` };
+  }
   const matches = [
     ['monster-zero', /\bmonster\b.*\b(?:ultra|zero|white)\b|\b(?:ultra|zero|white)\b.*\bmonster\b/],
     ['monster', /\bmonster\b/],
@@ -321,10 +335,11 @@ async function lookupBarcode(code, scannedAt = Date.now()) {
     const caffeine = nutriments.caffeine_100ml == null ? NaN : Number(nutriments.caffeine_100ml);
     const calories = nutriments['energy-kcal_100ml'] == null ? NaN : Number(nutriments['energy-kcal_100ml']);
     const catalogEstimate = barcodeCatalogEstimate(product, ml);
-    const mg = ml && Number.isFinite(caffeine) ? Math.round(caffeine * ml / 100) : catalogEstimate?.mg ?? null;
+    const hasProductCaffeine = ml && Number.isFinite(caffeine);
+    const mg = hasProductCaffeine ? Math.round(caffeine * ml / 100) : catalogEstimate?.mg ?? null;
     const kcal = ml && Number.isFinite(calories) ? Math.round(calories * ml / 100) : catalogEstimate?.kcal ?? 0;
     const name = [product.brands, product.product_name].filter(Boolean).join(' ').slice(0, 100);
-    chooseDrink({ id: null, barcode: true, barcodeNote: catalogEstimate?.note, name, cat: barcodeCategory(product), mg, kcal, serving: product.quantity || product.serving_size || '1 package', unit: 'bottle' }, scannedAt);
+    chooseDrink({ id: null, barcode: true, barcodeNote: hasProductCaffeine ? null : catalogEstimate?.note, name, cat: barcodeCategory(product), mg, kcal, serving: product.quantity || product.serving_size || '1 package', unit: 'bottle' }, scannedAt);
   } catch (error) {
     const currentStatus = $('#barcode-status');
     if (currentStatus) currentStatus.textContent = error.message || 'Could not look up this product. Check your connection and try again.';

@@ -45,6 +45,10 @@ try {
             '9876543210996': { product_name: 'Original', brands: 'Mountain Dew', quantity: '330 ml', categories_tags: ['en:soft-drinks'], nutriments: {} },
             '9876543210997': { product_name: 'Rehab', brands: 'Monster', quantity: '500 ml', categories_tags: ['en:energy-drinks'], nutriments: {} },
             '9876543210998': { product_name: 'Diet Pepsi', brands: 'Pepsi', quantity: '330 ml', categories_tags: ['en:soft-drinks'], nutriments: {} },
+            '9876543210999': { product_name: 'Lemon Yuzu', brands: 'Battery', quantity: '500 ml', categories_tags: ['en:energy-drinks'], nutriments: {} },
+            '9876543211000': { product_name: 'Immunity Lemon Yuzu', brands: 'Battery', quantity: '330 ml', categories_tags: ['en:energy-drinks'], nutriments: {} },
+            '9876543211001': { product_name: 'BCAA', brands: 'NOCCO', quantity: '330 ml', categories_tags: ['en:energy-drinks'], nutriments: {} },
+            '9876543211002': { product_name: 'Sugar Free Energy Drink', brands: 'Battery', quantity: '330 ml', categories_tags: ['en:energy-drinks'], nutriments: {} },
           };
           const product = products[code] || { product_name: 'Iced coffee', brands: 'Test brand', quantity: '250 ml', categories_tags: ['en:coffee'], nutriments: { caffeine_100ml: 32, 'energy-kcal_100ml': 48 } };
           return Promise.resolve(new Response(JSON.stringify({ status: 1, product }), { headers: { 'Content-Type': 'application/json' } }));
@@ -81,6 +85,9 @@ try {
     await page.getByRole('button', { name: 'All drinks', exact: true }).click();
     await page.getByRole('searchbox', { name: 'Search drinks' }).fill('celsius');
     assert.equal(await page.locator('.catalog-drink').count(), 1);
+    await page.getByRole('searchbox', { name: 'Search drinks' }).fill('battery lemon yuzu');
+    assert.equal(await page.locator('.catalog-drink').count(), 1);
+    assert.match(await page.locator('.catalog-drink').innerText(), /Battery Lemon Yuzu[\s\S]*160 mg/);
     await accessibility(page, `${engineName} catalog`);
     await page.keyboard.press('Escape');
     assert.equal(await page.locator('dialog[open]').count(), 0);
@@ -200,6 +207,8 @@ try {
       ['9876543210991', '200', 'Celsius'], ['9876543210992', '300', 'Bang Energy'],
       ['9876543210993', '34', 'Coca-Cola'], ['9876543210994', '46', 'Diet Coke'],
       ['9876543210995', '38', 'Pepsi'], ['9876543210996', '54', 'Mountain Dew'],
+      ['9876543210999', '160', 'Battery Lemon Yuzu'], ['9876543211000', '106', 'Battery Immunity'],
+      ['9876543211001', '180', 'NOCCO BCAA'], ['9876543211002', '106', 'Battery Sugar Free'],
     ];
     for (const [code, mg, label] of catalogFallbacks) {
       await page.getByRole('button', { name: 'All drinks', exact: true }).click();
