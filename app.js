@@ -38,6 +38,7 @@ const icons = {
   devices: '<rect x="2" y="4" width="14" height="10" rx="2"/><path d="M5 18h8"/><rect x="17" y="8" width="5" height="12" rx="1.5"/>',
   sync: '<path d="M20 11a8 8 0 0 0-14.5-4.5L4 8m0-5v5h5M4 13a8 8 0 0 0 14.5 4.5L20 16m0 5v-5h-5"/>',
   signout: '<path d="M14 4h4a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-4M10 16l-4-4 4-4M6 12h10"/>',
+  scan: '<path d="M4 7V5a1 1 0 0 1 1-1h2m10 0h2a1 1 0 0 1 1 1v2M4 17v2a1 1 0 0 0 1 1h2m10 0h2a1 1 0 0 0 1-1v-2M4 12h16"/>',
 };
 const icon = name => `<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${icons[name] || icons.cup}</svg>`;
 function cup(cat = 'coffee', large = false) {
@@ -126,6 +127,13 @@ function render() {
   $('meta[name="theme-color"]').content = state.settings.theme === 'dark' ? '#242321' : '#f7f4ec';
   const titles = { today: ['A little ritual. A little balance.', 'Your daily brew.'], history: ['Every sip tells a story.', 'The pages so far.'], sleep: ['Make room for a softer evening.', 'Your wind-down.'], lab: ['A dash of this. A splash of that.', 'The Blend Lab.'] };
   app.innerHTML = `<div class="app-shell"><aside class="sidebar"><a href="#today" class="brand" aria-label="Kaffe home">${icon('cup')}<span>kaffe<span class="brand-dot">.</span></span></a><p class="brand-note">a little coffee journal</p><nav aria-label="Main navigation">${[['today', 'Today'], ['history', 'History'], ['sleep', 'Sleep'], ['lab', 'Blend Lab']].map(([id, title]) => `<a class="nav-link ${view === id ? 'selected' : ''}" href="#${id}" aria-label="${title}" ${view === id ? 'aria-current="page"' : ''}>${icon(id)}<span>${title}</span>${view === id ? '<span class="nav-dot"></span>' : ''}</a>`).join('')}</nav><div class="sidebar-bottom"><div class="sidebar-doodle">${cup('tea')}<p>Good days are made<br>one small sip at a time.</p></div><div class="utility"><button class="icon-button" data-action="theme" data-focus="theme" aria-label="Switch to ${state.settings.theme === 'light' ? 'dark' : 'light'} theme" title="Change theme">${icon(state.settings.theme === 'light' ? 'sleep' : 'sun')}</button><button class="icon-button" data-action="sound" data-focus="sound" aria-label="${state.settings.sound ? 'Disable' : 'Enable'} sounds" aria-pressed="${state.settings.sound}" title="Toggle sounds">${icon(state.settings.sound ? 'sound' : 'mute')}</button><button class="icon-button" data-action="settings" title="Settings" aria-label="Settings">${icon('settings')}</button><button class="icon-button" data-action="export" title="Export journal" aria-label="Export journal">${icon('download')}</button></div>${accountChip()}</div></aside><main id="main" tabindex="-1"><header class="page-header"><div><p class="eyebrow">${titles[view][0]}</p><h1>${titles[view][1]}</h1></div></header>${warning ? `<div class="warning" role="alert">${esc(warning)} <button class="text-button" data-action="export-json">Export backup</button></div>` : ''}${view === 'today' ? todayView() : view === 'history' ? historyView() : view === 'sleep' ? sleepView() : labView()}<footer class="page-footer"><span>Made for mindful sipping, not perfect numbers.</span><span>Caffeine values are estimates. ${state.settings.halfLife}h half-life model.</span></footer></main></div>`;
+  const mainNav = app.querySelector('nav[aria-label="Main navigation"]');
+  if (mainNav) {
+    const scanButton = document.createElement('button');
+    scanButton.className = 'mobile-scan-button'; scanButton.type = 'button'; scanButton.dataset.action = 'barcode';
+    scanButton.innerHTML = `${icon('scan')}<span>Scan barcode</span>`;
+    mainNav.before(scanButton);
+  }
   if (focusKey) document.querySelector(`[data-focus="${CSS.escape(focusKey)}"]`)?.focus({ preventScroll: true });
   watchBlendDock();
 }
@@ -158,7 +166,7 @@ function decayChart(now, endTime) {
 function entryList(entries) {
   const bonuses = waterBonuses(state.entries);
   if (!entries.length) return `<div class="empty-state">${icon('cup')}<div><h3>No sips on this page. Yet.</h3><p>Log a drink or a glass of water and make yourself at home.</p></div></div>`;
-  return `<div class="entry-list">${[...entries].sort((a, b) => b.time - a.time).map(e => `<article class="entry"><div class="entry-icon ${esc(e.cat)}">${icon(e.kind === 'water' ? 'water' : e.cat === 'energy' ? 'energy' : 'cup')}</div><div class="entry-name"><strong>${esc(e.name)}</strong><span>${e.kind === 'water' ? `1 glass · ${bonuses.has(e.id) ? '2 points · post-caffeine bonus' : '1 point'}` : `${e.amount}× ${portionName(e.cat)}${e.amount === 1 ? '' : 's'} · ${e.kcal} kcal`}</span></div><button class="entry-time" data-action="edit" data-id="${esc(e.id)}" aria-label="Edit time for ${esc(e.name)} at ${fmtTime(e.time)}">${fmtTime(e.time)}${icon('edit')}</button><strong class="entry-mg">${e.kind === 'water' ? '—' : `${e.mg}<small> mg</small>`}</strong><button class="icon-button delete-button" data-action="delete" data-id="${esc(e.id)}" aria-label="Delete ${esc(e.name)} at ${fmtTime(e.time)}">${icon('trash')}</button></article>`).join('')}</div>`;
+  return `<div class="entry-list">${[...entries].sort((a, b) => b.time - a.time).map(e => `<article class="entry"><div class="entry-icon ${esc(e.cat)}">${icon(e.kind === 'water' ? 'water' : e.cat === 'energy' ? 'energy' : 'cup')}</div><div class="entry-name"><strong>${esc(e.name)}</strong><span>${e.kind === 'water' ? `1 glass · ${bonuses.has(e.id) ? '2 points · post-caffeine bonus' : '1 point'}` : `${e.amount}× ${portionName(e.cat, e)}${e.amount === 1 ? '' : 's'} · ${e.kcal} kcal`}</span></div><button class="entry-time" data-action="edit" data-id="${esc(e.id)}" aria-label="Edit time for ${esc(e.name)} at ${fmtTime(e.time)}">${fmtTime(e.time)}${icon('edit')}</button><strong class="entry-mg">${e.kind === 'water' ? '—' : `${e.mg}<small> mg</small>`}</strong><button class="icon-button delete-button" data-action="delete" data-id="${esc(e.id)}" aria-label="Delete ${esc(e.name)} at ${fmtTime(e.time)}">${icon('trash')}</button></article>`).join('')}</div>`;
 }
 function historyView() {
   const days = historyDays(state.entries, historyRange), total = days.reduce((s, d) => s + d.mg, 0), count = days.reduce((s, d) => s + d.drinks, 0);
@@ -233,13 +241,131 @@ function watchBlendDock() {
   dockObserver.observe(cup);
 }
 function catalogMarkup() {
-  const results = DRINKS.filter(d => (modalCategory === 'all' || d.cat === modalCategory) && `${d.name} ${d.cat}`.toLowerCase().includes(modalQuery.toLowerCase()));
+  const results = DRINKS.filter(d => (modalCategory === 'all' || d.cat === modalCategory) && `${d.name} ${d.cat} ${d.barcodeAliases.join(' ')}`.toLowerCase().includes(modalQuery.toLowerCase()));
   return `<div class="catalog-results">${results.length ? results.map(d => `<button class="catalog-drink" data-action="choose" data-id="${d.id}"><span class="entry-icon ${d.cat}">${icon(d.cat === 'energy' ? 'energy' : 'cup')}</span><span><strong>${d.name}</strong><small>${d.serving} · ${d.kcal} kcal</small></span><b>${d.mg}<small> mg</small></b>${icon('plus')}</button>`).join('') : '<p class="empty-search">No matching drinks. Try another name or category.</p>'}</div>`;
 }
 function openCatalog() {
+  stopBarcodeCamera();
   modalQuery = ''; modalCategory = 'all';
-  picker.innerHTML = `<div class="dialog-heading"><div><p class="eyebrow">FIND YOUR NEXT SIP</p><h2 id="picker-title">What’s in your cup?</h2></div><button class="icon-button" data-action="close" aria-label="Close drink picker">${icon('close')}</button></div><label class="search-label"><span class="sr-only">Search drinks</span><input id="drink-search" type="search" placeholder="Search coffee, tea, energy drinks…" autocomplete="off"></label><div class="chips catalog-chips">${CATEGORIES.map(([id, name]) => `<button class="chip ${id === 'all' ? 'selected' : ''}" data-action="catalog-category" data-category="${id}" aria-pressed="${id === 'all'}">${name}</button>`).join('')}</div><div id="catalog-list">${catalogMarkup()}</div><p class="small-note">Estimates per serving. Actual caffeine varies by brand and preparation.</p>`;
+  picker.innerHTML = `<div class="dialog-heading"><div><p class="eyebrow">FIND YOUR NEXT SIP</p><h2 id="picker-title">What’s in your cup?</h2></div><button class="icon-button" data-action="close" aria-label="Close drink picker">${icon('close')}</button></div><button class="button barcode-open" data-action="barcode">${icon('scan')}<span>Scan a barcode</span></button><label class="search-label"><span class="sr-only">Search drinks</span><input id="drink-search" type="search" placeholder="Search coffee, tea, energy drinks…" autocomplete="off"></label><div class="chips catalog-chips">${CATEGORIES.map(([id, name]) => `<button class="chip ${id === 'all' ? 'selected' : ''}" data-action="catalog-category" data-category="${id}" aria-pressed="${id === 'all'}">${name}</button>`).join('')}</div><div id="catalog-list">${catalogMarkup()}</div><p class="small-note">Estimates per serving. Actual caffeine varies by brand and preparation.</p>`;
   showDialog(); $('#drink-search').focus();
+}
+let barcodeControls = null, barcodeLookup = false;
+function stopBarcodeCamera() {
+  barcodeControls?.stop(); barcodeControls = null;
+  const video = $('#barcode-video');
+  if (video?.srcObject) { video.srcObject.getTracks().forEach(track => track.stop()); video.srcObject = null; }
+}
+function openBarcode() {
+  stopBarcodeCamera(); barcodeLookup = false;
+  const canScan = window.ZXingBrowser?.BrowserMultiFormatReader && navigator.mediaDevices?.getUserMedia;
+  picker.innerHTML = `<div class="dialog-heading"><div><p class="eyebrow">QUICK PRODUCT LOOKUP</p><h2 id="picker-title">Scan a barcode</h2></div><button class="icon-button" data-action="close" aria-label="Close barcode scanner">${icon('close')}</button></div>${canScan ? `<button class="button primary full-width" data-action="start-scan">${icon('scan')}<span>Open camera</span></button><video class="barcode-video" id="barcode-video" muted playsinline hidden></video>` : '<p class="small-note scanner-note">Camera scanning is not available in this browser. Enter the barcode number instead.</p>'}<form id="barcode-form" class="barcode-form"><label for="barcode-input">Barcode number</label><div class="barcode-entry"><input id="barcode-input" type="text" inputmode="numeric" autocomplete="off" pattern="[0-9]{8,14}" minlength="8" maxlength="14" placeholder="EAN or UPC" required><button class="button" type="submit">Look up</button></div></form><p class="barcode-status" id="barcode-status" role="status" aria-live="polite">The barcode is sent to Open Food Facts for product details.</p><button class="text-button back-catalog" data-action="catalog">Back to drinks</button>`;
+  showDialog(); $('#barcode-input').focus();
+}
+function barcodeMl(quantity) {
+  const matches = [...String(quantity || '').matchAll(/(\d+(?:[.,]\d+)?)\s*(ml|cl|l)\b/gi)];
+  if (!matches.length) return null;
+  const [, amount, unit] = matches.at(-1), value = Number(amount.replace(',', '.'));
+  return Math.round(value * ({ ml: 1, cl: 10, l: 1000 })[unit.toLowerCase()]);
+}
+function barcodeCategory(product) {
+  const description = `${product.product_name || ''} ${product.brands || ''} ${(Array.isArray(product.categories_tags) ? product.categories_tags : []).join(' ')}`.toLowerCase();
+  if (/energy|caffeine|energy-drink/.test(description)) return 'energy';
+  if (/coffee|latte|espresso|cappuccino/.test(description)) return 'coffee';
+  return 'soda';
+}
+function barcodeCatalogEstimate(product, ml) {
+  const description = `${product.product_name || ''} ${product.brands || ''}`.toLowerCase();
+  const normalize = value => value.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+  const normalized = normalize(description);
+  const productWords = new Set(normalized.split(' '));
+  const catalogDrink = DRINKS.flatMap(drink => drink.cat === 'energy' ? drink.barcodeAliases.map(alias => ({ drink, alias: normalize(alias) })) : [])
+    .filter(match => match.alias.split(' ').every(word => productWords.has(word)))
+    .sort((a, b) => b.alias.length - a.alias.length)[0]?.drink;
+  if (catalogDrink) {
+    const catalogMl = barcodeMl(catalogDrink.serving) || 1, packageMl = ml || catalogMl;
+    const mg = catalogDrink.mgPer100ml
+      ? Math.round(catalogDrink.mgPer100ml * packageMl / 100)
+      : Math.round(catalogDrink.mg * packageMl / catalogMl);
+    const kcal = Math.round(catalogDrink.kcal * packageMl / catalogMl);
+    return { mg, kcal, note: `Catalog estimate based on ${catalogDrink.name}: ${mg} mg for ${packageMl} ml. Check the package label.` };
+  }
+  const matches = [
+    ['monster-zero', /\bmonster\b.*\b(?:ultra|zero|white)\b|\b(?:ultra|zero|white)\b.*\bmonster\b/],
+    ['monster', /\bmonster\b/],
+    ['rb-sugarfree', /\bred\s*bull\b.*\b(?:sugar[ -]?free|zero)\b|\b(?:sugar[ -]?free|zero)\b.*\bred\s*bull\b/],
+    ['red-bull', /\bred\s*bull\b/],
+    ['celsius', /\bcelsius\b/],
+    ['bang', /\bbang\b/],
+    ['diet-coke', /\bdiet\s+coke\b|\bcoca[- ]cola\b.*\b(?:diet|light)\b/],
+    ['coke', /\b(?:coca[- ]cola|coke)\b/],
+    ['pepsi', /\bpepsi\b/],
+    ['mtn-dew', /\b(?:mountain|mtn)\s+dew\b/],
+  ];
+  const unsupportedVariants = {
+    monster: /\b(?:rehab|java|juice|nitro|reserve|assault|rehydration|hydro|punch)\b/,
+    bang: /\bshot\b/,
+    celsius: /\bessentials\b/,
+    coke: /\b(?:diet|zero|light|caffeine[ -]?free)\b/,
+    pepsi: /\b(?:diet|zero|max|light)\b/,
+    'mtn-dew': /\b(?:diet|zero|code\s+red|kickstart)\b/,
+  };
+  const variant = matches.find(([id, pattern]) => pattern.test(description) && !unsupportedVariants[id]?.test(description))?.[0];
+  if (!variant) return null;
+  const drink = DRINK_BY_ID[variant], catalogMl = barcodeMl(drink.serving) || 1, packageMl = ml || catalogMl;
+  return {
+    mg: Math.round(drink.mg * packageMl / catalogMl),
+    kcal: Math.round(drink.kcal * packageMl / catalogMl),
+    note: `Catalog estimate based on ${drink.name}: ${Math.round(drink.mg * packageMl / catalogMl)} mg for ${packageMl} ml. Check the package label.`,
+  };
+}
+async function lookupBarcode(code, scannedAt = Date.now()) {
+  if (!/^\d{8,14}$/.test(code) || barcodeLookup) return;
+  barcodeLookup = true; stopBarcodeCamera();
+  const status = $('#barcode-status');
+  if (status) status.textContent = 'Looking up this product…';
+  try {
+    const url = `https://world.openfoodfacts.org/api/v2/product/${encodeURIComponent(code)}.json?fields=product_name,brands,quantity,serving_size,nutriments,categories_tags`;
+    const response = await fetch(url, { headers: { Accept: 'application/json' } });
+    if (!response.ok) throw new Error('Product lookup is unavailable. Try again or use the drink catalog.');
+    const result = await response.json();
+    const product = result.status === 1 ? result.product : null;
+    if (!product?.product_name) throw new Error('No product found for this barcode. Try the drink catalog instead.');
+    const ml = barcodeMl(product.quantity || product.serving_size);
+    const nutriments = product.nutriments || {};
+    const caffeine = nutriments.caffeine_100ml == null ? NaN : Number(nutriments.caffeine_100ml);
+    const calories = nutriments['energy-kcal_100ml'] == null ? NaN : Number(nutriments['energy-kcal_100ml']);
+    const catalogEstimate = barcodeCatalogEstimate(product, ml);
+    const hasProductCaffeine = ml && Number.isFinite(caffeine);
+    const mg = hasProductCaffeine ? Math.round(caffeine * ml / 100) : catalogEstimate?.mg ?? null;
+    const kcal = ml && Number.isFinite(calories) ? Math.round(calories * ml / 100) : catalogEstimate?.kcal ?? 0;
+    const name = [product.brands, product.product_name].filter(Boolean).join(' ').slice(0, 100);
+    chooseDrink({ id: null, barcode: true, barcodeNote: hasProductCaffeine ? null : catalogEstimate?.note, name, cat: barcodeCategory(product), mg, kcal, serving: product.quantity || product.serving_size || '1 package', unit: 'bottle' }, scannedAt);
+  } catch (error) {
+    const currentStatus = $('#barcode-status');
+    if (currentStatus) currentStatus.textContent = error.message || 'Could not look up this product. Check your connection and try again.';
+  } finally { barcodeLookup = false; }
+}
+async function startBarcodeCamera() {
+  const status = $('#barcode-status');
+  try {
+    const video = $('#barcode-video');
+    video.hidden = false;
+    if (status) status.textContent = 'Opening the camera…';
+    const reader = new ZXingBrowser.BrowserMultiFormatReader();
+    let scanned = false;
+    const controls = await reader.decodeFromConstraints({ audio: false, video: { facingMode: { ideal: 'environment' } } }, video, result => {
+      if (!result || scanned) return;
+      scanned = true;
+      void lookupBarcode(result.getText(), Date.now());
+    });
+    barcodeControls = controls;
+    if (scanned) stopBarcodeCamera();
+    else if (status) status.textContent = 'Hold the barcode in view.';
+  } catch {
+    stopBarcodeCamera();
+    if (status) status.textContent = 'Camera unavailable. Check camera permission or enter the barcode number below.';
+  }
 }
 // Answers stay in memory only: pregnancy and medication are nobody's business
 // but the user's, and the estimate is only useful while choosing a value.
@@ -273,21 +399,23 @@ function updateEstimate() {
 }
 function showDialog() { if (!picker.open) picker.showModal(); }
 // Portions are discrete: whole cups (or cans for canned drinks), in halves.
-const portionName = cat => ['energy', 'soda'].includes(cat) ? 'can' : 'cup';
-const portionLabel = (n, cat) => `${({ 0.5: '½', 1.5: '1½' })[n] || n}×`;
-function chooseDrink(drink) {
+const portionName = (cat, drink) => drink?.unit || (['energy', 'soda'].includes(cat) ? 'can' : 'cup');
+const portionLabel = n => `${({ 0.5: '½', 1.5: '1½' })[n] || n}×`;
+function chooseDrink(drink, logTime = Date.now()) {
   modalDrink = drink; modalAmount = 1;
-  const unit = portionName(drink.cat);
-  picker.innerHTML = `<div class="dialog-heading"><div><p class="eyebrow">MAKE IT YOURS</p><h2 id="picker-title">${esc(drink.name)}</h2></div><button class="icon-button" data-action="close" aria-label="Close amount picker">${icon('close')}</button></div><form id="log-form"><div class="amount-hero">${cup(drink.cat)}<div><strong id="amount-mg">${drink.mg}<small> mg</small></strong><p><span id="amount-kcal">${drink.kcal}</span> kcal · per ${esc(drink.serving || '1 blend')}</p><span class="muted" id="amount-label">1 ${unit} · ${drink.mg} mg</span></div></div><div class="section-heading"><span class="eyebrow">HOW MUCH?</span></div><div class="amount-presets">${[.5, 1, 1.5, 2].map(n => `<button type="button" data-action="amount-preset" data-value="${n}" class="chip ${n === 1 ? 'selected' : ''}" aria-pressed="${n === 1}">${portionLabel(n, drink.cat)}</button>`).join('')}</div><div class="form-grid"><label>Date<input type="date" id="log-date" value="${dayKey()}" max="${dayKey()}" required></label><label>Time<input type="time" id="log-time" value="${timeValue()}" required></label></div><p id="form-error" class="form-error" role="alert"></p><button class="button primary full-width" type="submit">${icon('plus')}Add to my journal</button><button type="button" class="text-button back-catalog" data-action="catalog">Back to all drinks</button></form>`;
+  const unit = portionName(drink.cat, drink);
+  const timeFields = `<div class="form-grid"><label>Date<input type="date" id="log-date" value="${dayKey(logTime)}" max="${dayKey()}" required></label><label>Time<input type="time" id="log-time" value="${timeValue(logTime)}" required></label></div>`;
+  const customFields = drink.barcode ? `<div class="barcode-nutrition"><label>Caffeine per package (mg)<input type="number" id="custom-mg" min="0" max="3000" step="1" value="${drink.mg ?? ''}" required></label><label>Calories (kcal)<input type="number" id="custom-kcal" min="0" max="5000" step="1" value="${drink.kcal}" required></label><p class="small-note">${esc(drink.barcodeNote || (drink.mg === null ? 'Caffeine was not listed. Check the package and enter its value.' : 'Product values are estimates; check the package label.'))}</p></div>` : '';
+  picker.innerHTML = `<div class="dialog-heading"><div><p class="eyebrow">MAKE IT YOURS</p><h2 id="picker-title">${esc(drink.name)}</h2></div><button class="icon-button" data-action="close" aria-label="Close amount picker">${icon('close')}</button></div><form id="log-form"><div class="amount-hero">${cup(drink.cat)}<div><strong id="amount-mg">${drink.mg ?? '—'}<small> mg</small></strong><p><span id="amount-kcal">${drink.kcal}</span> kcal · per ${esc(drink.serving || '1 blend')}</p><span class="muted" id="amount-label">1 ${unit} · ${drink.mg ?? '—'} mg</span></div></div>${customFields}<div class="section-heading"><span class="eyebrow">HOW MUCH?</span></div><div class="amount-presets">${[.5, 1, 1.5, 2].map(n => `<button type="button" data-action="amount-preset" data-value="${n}" class="chip ${n === 1 ? 'selected' : ''}" aria-pressed="${n === 1}">${portionLabel(n, drink.cat)}</button>`).join('')}</div>${timeFields}<p id="form-error" class="form-error" role="alert"></p><button class="button primary full-width" type="submit">${icon('plus')}Add to my journal</button><button type="button" class="text-button back-catalog" data-action="catalog">Back to all drinks</button></form>`;
   showDialog(); $('#log-date').focus();
 }
 function updateAmount(n) {
   modalAmount = [0.5, 1, 1.5, 2].includes(n) ? n : 1;
-  const unit = portionName(modalDrink.cat);
+  const unit = portionName(modalDrink.cat, modalDrink);
   const summary = `${({ 0.5: '½', 1.5: '1½' })[modalAmount] || modalAmount} ${unit}${modalAmount === 1 ? '' : 's'}`;
-  $('#amount-mg').innerHTML = `${Math.round(modalDrink.mg * modalAmount)}<small> mg</small>`;
+  $('#amount-mg').innerHTML = `${modalDrink.mg === null ? '—' : Math.round(modalDrink.mg * modalAmount)}<small> mg</small>`;
   $('#amount-kcal').textContent = Math.round(modalDrink.kcal * modalAmount);
-  $('#amount-label').textContent = `${summary} · ${Math.round(modalDrink.mg * modalAmount)} mg`;
+  $('#amount-label').textContent = `${summary} · ${modalDrink.mg === null ? '—' : Math.round(modalDrink.mg * modalAmount)} mg`;
   picker.querySelectorAll('[data-action="amount-preset"]').forEach(b => { const selected = +b.dataset.value === modalAmount; b.classList.toggle('selected', selected); b.setAttribute('aria-pressed', selected); });
 }
 function editEntry(id) {
@@ -515,6 +643,8 @@ document.addEventListener('click', event => {
       $('#half-life').value = d.value; $('#half-life-value').textContent = `${d.value} h`; updateEstimate(); break;
     }
     case 'catalog': openCatalog(); break;
+    case 'barcode': openBarcode(); break;
+    case 'start-scan': void startBarcodeCamera(); break;
     case 'close': picker.close(); break;
     case 'choose': chooseDrink(DRINK_BY_ID[d.id]); break;
     case 'catalog-category':
@@ -558,6 +688,8 @@ document.addEventListener('click', event => {
 document.addEventListener('input', event => {
   if (event.target.id === 'half-life') $('#half-life-value').textContent = `${event.target.value} h`;
   if (event.target.id === 'drink-search') { modalQuery = event.target.value; $('#catalog-list').innerHTML = catalogMarkup(); }
+  if (event.target.id === 'custom-mg') { modalDrink.mg = event.target.value === '' ? null : Number(event.target.value); updateAmount(modalAmount); }
+  if (event.target.id === 'custom-kcal') { modalDrink.kcal = Number(event.target.value) || 0; updateAmount(modalAmount); }
 });
 document.addEventListener('change', event => {
   const { id, value } = event.target;
@@ -576,8 +708,11 @@ document.addEventListener('keydown', event => {
   if (event.key === 'Escape' && picker.open) { event.preventDefault(); picker.close(); }
 }, true);
 picker.addEventListener('submit', event => {
-  event.preventDefault(); if (event.target.id === 'estimate-form') return; const time = formTime(); if (time === null) return;
+  event.preventDefault(); if (event.target.id === 'estimate-form') return;
+  if (event.target.id === 'barcode-form') { void lookupBarcode($('#barcode-input').value.trim(), Date.now()); return; }
+  const time = formTime(); if (time === null) return;
   if (event.target.id === 'log-form') {
+    if (modalDrink.barcode) { modalDrink.mg = Number($('#custom-mg').value); modalDrink.kcal = Number($('#custom-kcal').value); }
     const cupArt = picker.querySelector('.amount-hero .cup-art');
     const fromLab = view === 'lab';
     const flight = (view === 'today' || fromLab) && cupArt ? { from: cupArt.getBoundingClientRect(), svg: cupArt.outerHTML, cat: modalDrink.cat, before: todayFigures() } : null;
@@ -585,7 +720,7 @@ picker.addEventListener('submit', event => {
     picker.close();
     // A finished blend lands on Today, so the pour shows where it counts. Back returns to the Lab.
     if (fromLab) { history.pushState(null, '', '#today'); view = 'today'; window.scrollTo({ top: 0 }); }
-    commit(`${modalDrink.name} logged. ${Math.round(modalDrink.mg * modalAmount)} mg · ${modalAmount} ${portionName(modalDrink.cat)}${modalAmount === 1 ? '' : 's'}, noted.`);
+    commit(`${modalDrink.name} logged. ${Math.round(modalDrink.mg * modalAmount)} mg · ${modalAmount} ${portionName(modalDrink.cat, modalDrink)}${modalAmount === 1 ? '' : 's'}, noted.`);
     if (flight) pourDrink({ ...flight, after: todayFigures(), sound: glug, pulse: heartbeat });
   } else if (event.target.id === 'edit-form') {
     const entry = state.entries.find(e => e.id === event.target.dataset.id);
@@ -593,6 +728,7 @@ picker.addEventListener('submit', event => {
     picker.close(); commit('Journal time updated.');
   }
 });
+picker.addEventListener('close', stopBarcodeCamera);
 picker.addEventListener('click', event => { if (event.target === picker) { const r = picker.getBoundingClientRect(); if (event.clientX < r.left || event.clientX > r.right || event.clientY < r.top || event.clientY > r.bottom) picker.close(); } });
 document.addEventListener('dragstart', event => {
   const ingredient = event.target.closest('[data-ingredient]'); if (!ingredient || ingredient.disabled) return;
