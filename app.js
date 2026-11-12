@@ -266,6 +266,18 @@ function barcodeCategory(product) {
   if (/coffee|latte|espresso|cappuccino/.test(description)) return 'coffee';
   return 'soda';
 }
+function barcodeCatalogEstimate(product, ml) {
+  const description = `${product.product_name || ''} ${product.brands || ''}`.toLowerCase();
+  if (!/\bmonster\b/.test(description)) return null;
+  const variant = /\b(?:ultra|zero|white)\b/.test(description) ? 'monster-zero' : /\b(?:rehab|java|juice|nitro|reserve|assault|rehydration|hydro|punch)\b/.test(description) ? null : 'monster';
+  if (!variant) return null;
+  const drink = DRINK_BY_ID[variant], catalogMl = barcodeMl(drink.serving), packageMl = ml || catalogMl;
+  return {
+    mg: Math.round(drink.mg * packageMl / catalogMl),
+    kcal: Math.round(drink.kcal * packageMl / catalogMl),
+    note: `Catalog estimate based on ${drink.name}: ${Math.round(drink.mg * packageMl / catalogMl)} mg for ${packageMl} ml. Check the package label.`,
+  };
+}
 async function lookupBarcode(code, scannedAt = Date.now()) {
   if (!/^\d{8,14}$/.test(code) || barcodeLookup) return;
   barcodeLookup = true; stopBarcodeCamera();
@@ -282,10 +294,11 @@ async function lookupBarcode(code, scannedAt = Date.now()) {
     const nutriments = product.nutriments || {};
     const caffeine = nutriments.caffeine_100ml == null ? NaN : Number(nutriments.caffeine_100ml);
     const calories = nutriments['energy-kcal_100ml'] == null ? NaN : Number(nutriments['energy-kcal_100ml']);
-    const mg = ml && Number.isFinite(caffeine) ? Math.round(caffeine * ml / 100) : null;
-    const kcal = ml && Number.isFinite(calories) ? Math.round(calories * ml / 100) : 0;
+    const catalogEstimate = barcodeCatalogEstimate(product, ml);
+    const mg = ml && Number.isFinite(caffeine) ? Math.round(caffeine * ml / 100) : catalogEstimate?.mg ?? null;
+    const kcal = ml && Number.isFinite(calories) ? Math.round(calories * ml / 100) : catalogEstimate?.kcal ?? 0;
     const name = [product.brands, product.product_name].filter(Boolean).join(' ').slice(0, 100);
-    chooseDrink({ id: null, barcode: true, name, cat: barcodeCategory(product), mg, kcal, serving: product.quantity || product.serving_size || '1 package', unit: 'bottle' }, scannedAt);
+    chooseDrink({ id: null, barcode: true, barcodeNote: catalogEstimate?.note, name, cat: barcodeCategory(product), mg, kcal, serving: product.quantity || product.serving_size || '1 package', unit: 'bottle' }, scannedAt);
   } catch (error) {
     const currentStatus = $('#barcode-status');
     if (currentStatus) currentStatus.textContent = error.message || 'Could not look up this product. Check your connection and try again.';
@@ -350,7 +363,7 @@ function chooseDrink(drink, logTime = Date.now()) {
   modalDrink = drink; modalAmount = 1;
   const unit = portionName(drink.cat, drink);
   const timeFields = `<div class="form-grid"><label>Date<input type="date" id="log-date" value="${dayKey(logTime)}" max="${dayKey()}" required></label><label>Time<input type="time" id="log-time" value="${timeValue(logTime)}" required></label></div>`;
-  const customFields = drink.barcode ? `<div class="barcode-nutrition"><label>Caffeine per package (mg)<input type="number" id="custom-mg" min="0" max="3000" step="1" value="${drink.mg ?? ''}" required></label><label>Calories (kcal)<input type="number" id="custom-kcal" min="0" max="5000" step="1" value="${drink.kcal}" required></label><p class="small-note">${drink.mg === null ? 'Caffeine was not listed. Check the package and enter its value.' : 'Product values are estimates; check the package label.'}</p></div>` : '';
+  const customFields = drink.barcode ? `<div class="barcode-nutrition"><label>Caffeine per package (mg)<input type="number" id="custom-mg" min="0" max="3000" step="1" value="${drink.mg ?? ''}" required></label><label>Calories (kcal)<input type="number" id="custom-kcal" min="0" max="5000" step="1" value="${drink.kcal}" required></label><p class="small-note">${esc(drink.barcodeNote || (drink.mg === null ? 'Caffeine was not listed. Check the package and enter its value.' : 'Product values are estimates; check the package label.'))}</p></div>` : '';
   picker.innerHTML = `<div class="dialog-heading"><div><p class="eyebrow">MAKE IT YOURS</p><h2 id="picker-title">${esc(drink.name)}</h2></div><button class="icon-button" data-action="close" aria-label="Close amount picker">${icon('close')}</button></div><form id="log-form"><div class="amount-hero">${cup(drink.cat)}<div><strong id="amount-mg">${drink.mg ?? '—'}<small> mg</small></strong><p><span id="amount-kcal">${drink.kcal}</span> kcal · per ${esc(drink.serving || '1 blend')}</p><span class="muted" id="amount-label">1 ${unit} · ${drink.mg ?? '—'} mg</span></div></div>${customFields}<div class="section-heading"><span class="eyebrow">HOW MUCH?</span></div><div class="amount-presets">${[.5, 1, 1.5, 2].map(n => `<button type="button" data-action="amount-preset" data-value="${n}" class="chip ${n === 1 ? 'selected' : ''}" aria-pressed="${n === 1}">${portionLabel(n, drink.cat)}</button>`).join('')}</div>${timeFields}<p id="form-error" class="form-error" role="alert"></p><button class="button primary full-width" type="submit">${icon('plus')}Add to my journal</button><button type="button" class="text-button back-catalog" data-action="catalog">Back to all drinks</button></form>`;
   showDialog(); $('#log-date').focus();
 }

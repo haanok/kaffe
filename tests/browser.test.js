@@ -30,7 +30,13 @@ try {
     await page.addInitScript(() => {
       const originalFetch = window.fetch.bind(window);
       window.fetch = (input, options) => {
-        if (String(input).startsWith('https://world.openfoodfacts.org/api/v2/product/')) return Promise.resolve(new Response(JSON.stringify({ status: 1, product: { product_name: 'Iced coffee', brands: 'Test brand', quantity: '250 ml', categories_tags: ['en:coffee'], nutriments: { caffeine_100ml: 32, 'energy-kcal_100ml': 48 } } }), { headers: { 'Content-Type': 'application/json' } }));
+        if (String(input).startsWith('https://world.openfoodfacts.org/api/v2/product/')) {
+          const monster = String(input).includes('9876543210987');
+          const product = monster
+            ? { product_name: 'Energy Drink', brands: 'Monster', quantity: '500 ml', categories_tags: ['en:energy-drinks'], nutriments: { 'energy-kcal_100ml': 46 } }
+            : { product_name: 'Iced coffee', brands: 'Test brand', quantity: '250 ml', categories_tags: ['en:coffee'], nutriments: { caffeine_100ml: 32, 'energy-kcal_100ml': 48 } };
+          return Promise.resolve(new Response(JSON.stringify({ status: 1, product }), { headers: { 'Content-Type': 'application/json' } }));
+        }
         return originalFetch(input, options);
       };
     });
@@ -170,6 +176,14 @@ try {
     assert.equal(scanned.kcal, 120);
     assert.equal(scanned.unit, 'bottle');
     assert.equal(new Date(scanned.time).getHours(), 10);
+    await page.getByRole('button', { name: 'All drinks', exact: true }).click();
+    await page.getByRole('button', { name: 'Scan a barcode' }).click();
+    await page.getByLabel('Barcode number').fill('9876543210987');
+    await page.getByRole('button', { name: 'Look up' }).click();
+    await page.getByLabel('Caffeine per package (mg)').waitFor();
+    assert.equal(await page.locator('#custom-mg').inputValue(), '160');
+    assert.match(await page.locator('.barcode-nutrition .small-note').innerText(), /Catalog estimate based on Monster Original/);
+    await page.keyboard.press('Escape');
     await page.getByRole('button', { name: 'All drinks', exact: true }).click();
     await page.getByRole('button', { name: 'Scan a barcode' }).click();
     await page.evaluate(() => {
