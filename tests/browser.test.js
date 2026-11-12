@@ -54,6 +54,12 @@ try {
     });
     await page.goto(origin);
     await page.getByRole('heading', { name: 'Your daily brew.' }).waitFor();
+    assert.equal(await page.locator('.mobile-scan-button').isVisible(), viewport.width <= 760, `${engineName}: mobile barcode button visibility`);
+    if (viewport.width <= 760) {
+      await page.getByRole('button', { name: 'Scan barcode' }).click();
+      await page.getByRole('heading', { name: 'Scan a barcode' }).waitFor();
+      await page.keyboard.press('Escape');
+    }
     assert.equal(await page.evaluate(() => typeof window.ZXingBrowser?.BrowserMultiFormatReader), 'function', `${engineName}: local ZXing bundle loaded`);
     await page.evaluate(() => navigator.serviceWorker.ready);
     await noOverflow(page, `${engineName} today`);
@@ -230,7 +236,11 @@ try {
     await page.keyboard.press('Escape');
     for (const width of [320, 375, 480, 600, 768, 1024, 1440]) {
       await page.setViewportSize({ width, height: 900 });
-      for (const name of ['today', 'history', 'sleep', 'lab']) { await route(page, name); await noOverflow(page, `${engineName} ${width}px ${name}`); }
+      for (const name of ['today', 'history', 'sleep', 'lab']) {
+        await route(page, name);
+        assert.equal(await page.locator('.mobile-scan-button').isVisible(), width <= 760, `${engineName} ${width}px ${name} scanner visibility`);
+        await noOverflow(page, `${engineName} ${width}px ${name}`);
+      }
     }
     assert.deepEqual(errors, [], `${engineName}: browser errors`);
     assert.deepEqual(external, [], `${engineName}: unexpected external runtime requests`);
