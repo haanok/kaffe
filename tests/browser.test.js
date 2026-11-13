@@ -27,8 +27,44 @@ try {
     const page = await context.newPage(), errors = [], external = [];
     page.on('pageerror', error => errors.push(error.message));
     page.on('request', request => { if (!request.url().startsWith(origin) && !request.url().startsWith('data:')) external.push(request.url()); });
+    await page.addInitScript(() => {
+      const originalFetch = window.fetch.bind(window);
+      window.fetch = (input, options) => {
+        if (String(input).startsWith('https://world.openfoodfacts.org/api/v2/product/')) {
+          const code = new URL(String(input)).pathname.split('/').at(-1).split('.')[0];
+          const products = {
+            '9876543210987': { product_name: 'Energy Drink', brands: 'Monster', quantity: '500 ml', categories_tags: ['en:energy-drinks'], nutriments: { 'energy-kcal_100ml': 46 } },
+            '9876543210988': { product_name: 'Ultra Zero', brands: 'Monster', quantity: '500 ml', categories_tags: ['en:energy-drinks'], nutriments: {} },
+            '9876543210989': { product_name: 'Energy Drink', brands: 'Red Bull', quantity: '250 ml', categories_tags: ['en:energy-drinks'], nutriments: {} },
+            '9876543210990': { product_name: 'Sugarfree', brands: 'Red Bull', quantity: '250 ml', categories_tags: ['en:energy-drinks'], nutriments: {} },
+            '9876543210991': { product_name: 'Sparkling Orange', brands: 'Celsius', quantity: '350 ml', categories_tags: ['en:energy-drinks'], nutriments: {} },
+            '9876543210992': { product_name: 'Energy', brands: 'Bang', quantity: '470 ml', categories_tags: ['en:energy-drinks'], nutriments: {} },
+            '9876543210993': { product_name: 'Original Taste', brands: 'Coca-Cola', quantity: '330 ml', categories_tags: ['en:soft-drinks'], nutriments: {} },
+            '9876543210994': { product_name: 'Diet Coke', brands: 'Coca-Cola', quantity: '330 ml', categories_tags: ['en:soft-drinks'], nutriments: {} },
+            '9876543210995': { product_name: 'Cola', brands: 'Pepsi', quantity: '330 ml', categories_tags: ['en:soft-drinks'], nutriments: {} },
+            '9876543210996': { product_name: 'Original', brands: 'Mountain Dew', quantity: '330 ml', categories_tags: ['en:soft-drinks'], nutriments: {} },
+            '9876543210997': { product_name: 'Rehab', brands: 'Monster', quantity: '500 ml', categories_tags: ['en:energy-drinks'], nutriments: {} },
+            '9876543210998': { product_name: 'Diet Pepsi', brands: 'Pepsi', quantity: '330 ml', categories_tags: ['en:soft-drinks'], nutriments: {} },
+            '9876543210999': { product_name: 'Lemon Yuzu', brands: 'Battery', quantity: '500 ml', categories_tags: ['en:energy-drinks'], nutriments: {} },
+            '9876543211000': { product_name: 'Immunity Lemon Yuzu', brands: 'Battery', quantity: '330 ml', categories_tags: ['en:energy-drinks'], nutriments: {} },
+            '9876543211001': { product_name: 'BCAA', brands: 'NOCCO', quantity: '330 ml', categories_tags: ['en:energy-drinks'], nutriments: {} },
+            '9876543211002': { product_name: 'Sugar Free Energy Drink', brands: 'Battery', quantity: '330 ml', categories_tags: ['en:energy-drinks'], nutriments: {} },
+          };
+          const product = products[code] || { product_name: 'Iced coffee', brands: 'Test brand', quantity: '250 ml', categories_tags: ['en:coffee'], nutriments: { caffeine_100ml: 32, 'energy-kcal_100ml': 48 } };
+          return Promise.resolve(new Response(JSON.stringify({ status: 1, product }), { headers: { 'Content-Type': 'application/json' } }));
+        }
+        return originalFetch(input, options);
+      };
+    });
     await page.goto(origin);
     await page.getByRole('heading', { name: 'Your daily brew.' }).waitFor();
+    assert.equal(await page.locator('.mobile-scan-button').isVisible(), viewport.width <= 760, `${engineName}: mobile barcode button visibility`);
+    if (viewport.width <= 760) {
+      await page.getByRole('button', { name: 'Scan barcode' }).click();
+      await page.getByRole('heading', { name: 'Scan a barcode' }).waitFor();
+      await page.keyboard.press('Escape');
+    }
+    assert.equal(await page.evaluate(() => typeof window.ZXingBrowser?.BrowserMultiFormatReader), 'function', `${engineName}: local ZXing bundle loaded`);
     await page.evaluate(() => navigator.serviceWorker.ready);
     await noOverflow(page, `${engineName} today`);
     await accessibility(page, `${engineName} today light`);
@@ -49,6 +85,9 @@ try {
     await page.getByRole('button', { name: 'All drinks', exact: true }).click();
     await page.getByRole('searchbox', { name: 'Search drinks' }).fill('celsius');
     assert.equal(await page.locator('.catalog-drink').count(), 1);
+    await page.getByRole('searchbox', { name: 'Search drinks' }).fill('battery lemon yuzu');
+    assert.equal(await page.locator('.catalog-drink').count(), 1);
+    assert.match(await page.locator('.catalog-drink').innerText(), /Battery Lemon Yuzu[\s\S]*160 mg/);
     await accessibility(page, `${engineName} catalog`);
     await page.keyboard.press('Escape');
     assert.equal(await page.locator('dialog[open]').count(), 0);
@@ -158,14 +197,78 @@ try {
     } else {
       console.log('MANUAL CHECK: Safari offline reload (Playwright WebKit internal navigation error)');
     }
+    await route(page, 'today');
+    await page.getByRole('button', { name: 'All drinks', exact: true }).click();
+    await page.getByRole('button', { name: 'Scan a barcode' }).click();
+    await page.getByLabel('Barcode number').fill('1234567890123');
+    await page.getByRole('button', { name: 'Look up' }).click();
+    await page.getByLabel('Caffeine per package (mg)').waitFor();
+    assert.equal(await page.locator('#custom-mg').inputValue(), '80');
+    assert.equal(await page.locator('#custom-kcal').inputValue(), '120');
+    assert.notEqual(await page.locator('#log-time').inputValue(), '');
+    await accessibility(page, `${engineName} barcode product`);
+    await page.locator('#log-time').fill('10:00');
+    await page.getByRole('button', { name: 'Add to my journal' }).click();
+    const scanned = (await journal(page)).entries.at(-1);
+    assert.equal(scanned.name, 'Test brand Iced coffee');
+    assert.equal(scanned.mg, 80);
+    assert.equal(scanned.kcal, 120);
+    assert.equal(scanned.unit, 'bottle');
+    assert.equal(await page.evaluate(time => new Date(time).getHours(), scanned.time), 10);
+    const catalogFallbacks = [
+      ['9876543210987', '160', 'Monster Original'], ['9876543210988', '150', 'Monster Zero Ultra'],
+      ['9876543210989', '80', 'Red Bull'], ['9876543210990', '80', 'Red Bull Sugar-free'],
+      ['9876543210991', '200', 'Celsius'], ['9876543210992', '300', 'Bang Energy'],
+      ['9876543210993', '34', 'Coca-Cola'], ['9876543210994', '46', 'Diet Coke'],
+      ['9876543210995', '38', 'Pepsi'], ['9876543210996', '54', 'Mountain Dew'],
+      ['9876543210999', '160', 'Battery Lemon Yuzu'], ['9876543211000', '106', 'Battery Immunity'],
+      ['9876543211001', '180', 'NOCCO BCAA'], ['9876543211002', '106', 'Battery Sugar Free'],
+    ];
+    for (const [code, mg, label] of catalogFallbacks) {
+      await page.getByRole('button', { name: 'All drinks', exact: true }).click();
+      await page.getByRole('button', { name: 'Scan a barcode' }).click();
+      await page.getByLabel('Barcode number').fill(code);
+      await page.getByRole('button', { name: 'Look up' }).click();
+      await page.getByLabel('Caffeine per package (mg)').waitFor();
+      assert.equal(await page.locator('#custom-mg').inputValue(), mg, `${label} catalog fallback`);
+      assert.match(await page.locator('.barcode-nutrition .small-note').innerText(), new RegExp(`Catalog estimate based on ${label}`));
+      await page.keyboard.press('Escape');
+    }
+    for (const code of ['9876543210997', '9876543210998']) {
+      await page.getByRole('button', { name: 'All drinks', exact: true }).click();
+      await page.getByRole('button', { name: 'Scan a barcode' }).click();
+      await page.getByLabel('Barcode number').fill(code);
+      await page.getByRole('button', { name: 'Look up' }).click();
+      await page.getByLabel('Caffeine per package (mg)').waitFor();
+      assert.equal(await page.locator('#custom-mg').inputValue(), '');
+      await page.keyboard.press('Escape');
+    }
+    await page.getByRole('button', { name: 'All drinks', exact: true }).click();
+    await page.getByRole('button', { name: 'Scan a barcode' }).click();
+    await page.evaluate(() => {
+      window.ZXingBrowser.BrowserMultiFormatReader = class {
+        async decodeFromConstraints(constraints, video, callback) {
+          const controls = { stop() {} };
+          setTimeout(() => callback({ getText: () => '1234567890123' }, null, controls), 25);
+          return controls;
+        }
+      };
+    });
+    await page.getByRole('button', { name: 'Open camera' }).click();
+    await page.getByLabel('Caffeine per package (mg)').waitFor();
+    await page.keyboard.press('Escape');
     for (const width of [320, 375, 480, 600, 768, 1024, 1440]) {
       await page.setViewportSize({ width, height: 900 });
-      for (const name of ['today', 'history', 'sleep', 'lab']) { await route(page, name); await noOverflow(page, `${engineName} ${width}px ${name}`); }
+      for (const name of ['today', 'history', 'sleep', 'lab']) {
+        await route(page, name);
+        assert.equal(await page.locator('.mobile-scan-button').isVisible(), width <= 760, `${engineName} ${width}px ${name} scanner visibility`);
+        await noOverflow(page, `${engineName} ${width}px ${name}`);
+      }
     }
     assert.deepEqual(errors, [], `${engineName}: browser errors`);
-    assert.deepEqual(external, [], `${engineName}: external runtime requests`);
+    assert.deepEqual(external, [], `${engineName}: unexpected external runtime requests`);
     await context.close();
-    console.log(`PASS ${engineName}: logging, editing, undo, search, history, sleep, blends, dark mode, ${engineName === 'chromium' ? 'offline' : 'offline not automated'}, accessibility, 7 viewport widths`);
+    console.log(`PASS ${engineName}: logging, editing, undo, barcode lookup, history, sleep, blends, dark mode, ${engineName === 'chromium' ? 'offline' : 'offline not automated'}, accessibility, 7 viewport widths`);
     await browser.close(); browser = null;
   }
   browser = await chromium.launch();

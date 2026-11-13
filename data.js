@@ -21,6 +21,15 @@ export const DRINKS = [
   ['yerba-mate', 'Yerba mate', 'tea', 85, 5, '240 ml'],
   ['red-bull', 'Red Bull', 'energy', 80, 110, '250 ml'],
   ['rb-sugarfree', 'Red Bull Sugar-free', 'energy', 80, 5, '250 ml'],
+  ['battery-original', 'Battery Original', 'energy', 106, 145, '330 ml', ['battery original', 'original battery', 'battery energy drink original'], 32],
+  ['battery-sugar-free', 'Battery Sugar Free', 'energy', 106, 5, '330 ml', ['battery sugar free', 'battery sugar-free', 'sugar free battery', 'sugarfree battery'], 32],
+  ['battery-lemon-yuzu', 'Battery Lemon Yuzu', 'energy', 160, 10, '500 ml', ['battery lemon yuzu', 'lemon yuzu battery'], 32],
+  ['battery-ruby', 'Battery Ruby', 'energy', 160, 10, '500 ml', ['battery ruby', 'battery raspberry pomegranate'], 32],
+  ['battery-lemon-lime', 'Battery Lemon Lime', 'energy', 106, 5, '330 ml', ['battery lemon lime', 'battery lemon-lime', 'lemon lime battery'], 32],
+  ['battery-focus', 'Battery Focus', 'energy', 106, 5, '330 ml', ['battery focus', 'battery blueberry pomegranate', 'focus battery'], 32],
+  ['battery-immunity', 'Battery Immunity', 'energy', 106, 5, '330 ml', ['battery immunity', 'immunity battery', 'immunity lemon yuzu battery'], 32],
+  ['battery-mango-lime', 'Battery Mango Lime', 'energy', 106, 5, '330 ml', ['battery mango lime'], 32],
+  ['nocco-bcaa', 'NOCCO BCAA', 'energy', 180, 7, '330 ml', ['nocco bcaa', 'nocco bcaa+', 'bcaa nocco'], 54.5],
   ['monster', 'Monster Original', 'energy', 160, 230, '500 ml'],
   ['monster-zero', 'Monster Zero Ultra', 'energy', 150, 10, '500 ml'],
   ['celsius', 'Celsius', 'energy', 200, 10, '350 ml'],
@@ -34,7 +43,7 @@ export const DRINKS = [
   ['caf-pill-100', 'Caffeine pill 100', 'supp', 100, 0, '1 tablet'],
   ['dark-choc', 'Dark chocolate', 'sweets', 24, 170, '30 g'],
   ['mocha-icecream', 'Coffee ice cream', 'sweets', 30, 220, '100 g'],
-].map(([id, name, cat, mg, kcal, serving]) => ({ id, name, cat, mg, kcal, serving }));
+].map(([id, name, cat, mg, kcal, serving, barcodeAliases = [], mgPer100ml = null]) => ({ id, name, cat, mg, kcal, serving, barcodeAliases, mgPer100ml }));
 export const DRINK_BY_ID = Object.fromEntries(DRINKS.map(d => [d.id, d]));
 export const QUICK = ['drip', 'dbl-espresso', 'latte', 'matcha', 'cold-brew', 'monster-zero'];
 export const INGREDIENTS = [

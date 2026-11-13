@@ -70,6 +70,7 @@ function normalizeEntry(e, kind) {
     name: water ? 'Water' : String(e.name || catalog.name).slice(0, 100),
     cat: water ? 'water' : catalog?.cat || 'coffee',
     amount: Number.isFinite(e.amount) && e.amount > 0 ? e.amount : 1,
+    unit: ['cup', 'can', 'bottle', 'glass', 'serving'].includes(e.unit) ? e.unit : null,
     mg: water ? 0 : e.mg, kcal: water ? 0 : e.kcal, time: e.time,
   };
 }
@@ -115,7 +116,7 @@ export function loadState(storage) {
   }
 }
 export function makeDrink(drink, amount = 1, time = Date.now()) {
-  return { id: uid(), kind: 'drink', drink: drink.id || null, name: drink.name, cat: drink.cat || 'coffee', amount, mg: Math.round(drink.mg * amount), kcal: Math.round(drink.kcal * amount), time };
+  return { id: uid(), kind: 'drink', drink: drink.id || null, name: drink.name, cat: drink.cat || 'coffee', unit: drink.unit || (['energy', 'soda'].includes(drink.cat) ? 'can' : 'cup'), amount, mg: Math.round(drink.mg * amount), kcal: Math.round(drink.kcal * amount), time };
 }
 // A rough personal starting point for the half-life setting, from average
 // effects reported for groups of people. Individuals vary widely; the UI must
