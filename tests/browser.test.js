@@ -214,7 +214,7 @@ try {
     assert.equal(scanned.mg, 80);
     assert.equal(scanned.kcal, 120);
     assert.equal(scanned.unit, 'bottle');
-    assert.equal(new Date(scanned.time).getHours(), 10);
+    assert.equal(await page.evaluate(time => new Date(time).getHours(), scanned.time), 10);
     const catalogFallbacks = [
       ['9876543210987', '160', 'Monster Original'], ['9876543210988', '150', 'Monster Zero Ultra'],
       ['9876543210989', '80', 'Red Bull'], ['9876543210990', '80', 'Red Bull Sugar-free'],
